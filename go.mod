@@ -1,4 +1,4 @@
-module githib.com/stfntmzc/razpravljalnica
+module razpravljalnica
 
 go 1.25.3
 
