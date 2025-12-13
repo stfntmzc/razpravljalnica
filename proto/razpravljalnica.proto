@@ -1,8 +1,10 @@
+// KOPIRANO IZ NAVODIL
+
 syntax = "proto3";
 
 package razpravljalnica;
 
-option go_package = "razpravljalnica/pb";
+option go_package = "/razpravljalnica";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
@@ -73,7 +75,7 @@ service  MessageBoard{
   rpc LikeMessage(LikeMessageRequest) returns (Message);
 
   // Request a node to which a subscription can be opened.
-  rpc GetSubcscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
+  rpc GetSubscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
 
   // Reads go to the tail node
 
