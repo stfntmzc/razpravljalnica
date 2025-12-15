@@ -51,9 +51,24 @@ func StartServer(url string) {
 }
 
 func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
-	user := &pb.User{Id: server.nextUserID, Name: req.Name}
-	server.users[user.Id] = user
-	server.nextUserID++
-	fmt.Printf("NEW USER: Name=%s, Id=%d\n", user.Name, user.Id)
-	return user, nil
+	user, exists := server.getUserByName(req.Name)
+	if exists {
+		fmt.Printf("USER JOINED: Name=%s, Id=%d\n", user.Name, user.Id)
+		return user, nil
+	} else {
+		newUser := &pb.User{Id: server.nextUserID, Name: req.Name}
+		server.users[newUser.Id] = newUser
+		server.nextUserID++
+		fmt.Printf("NEW USER: Name=%s, Id=%d\n", newUser.Name, newUser.Id)
+		return newUser, nil
+	}
+}
+
+func (server *MessageBoardServer) getUserByName(name string) (*pb.User, bool) {
+	for _, user := range server.users {
+		if user.Name == name {
+			return user, true
+		}
+	}
+	return nil, false
 }
