@@ -85,18 +85,37 @@ func handleInput(clientState *ClientState, line string) {
 	}
 }
 
-// start: commands =====================
+// start: commands ==========================================
 
 func writeHandler(clientState *ClientState, args []string) {
-	//fmt.Println("write; argumenti", args)
-	//message := pb.NewMessage
+	if len(args) == 0 {
+		fmt.Println("Usage: /write <text>")
+		return
+	}
+
+	text := strings.Join(args, " ")
+	topicID := int64(1) // za enkrat
+	// naredimo message request
+	req := &pb.PostMessageRequest{
+		TopicId: topicID,
+		UserId:  clientState.user.Id,
+		Text:    text,
+	}
+
+	message, err := clientState.rpc.PostMessage(clientState.ctx, req)
+	if err != nil {
+		fmt.Println("Error posting message:", err)
+		return
+	}
+	fmt.Printf("Message posted: %s\n", message.Text)
 }
 
 func quitHandler(clientState *ClientState, args []string) {
+	// pošlje signal v kanal
 	clientState.cancel()
 }
 
-// end: commands =======================
+// end: commands ============================================
 
 func connectToServer(url string, username string) (*ClientState, error) {
 	// konteks, funkcija za ugasnt
@@ -117,23 +136,4 @@ func connectToServer(url string, username string) (*ClientState, error) {
 	}
 
 	return &ClientState{conn: conn, rpc: client, user: user, ctx: ctx, cancel: cancel}, nil
-
-	/*fmt.Printf("gRPC client connecting to %v as user %s\n", url, username)
-	// vspostavljanje povezave
-	conn, err := grpc.NewClient(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	//defer conn.Close()
-	// ustvarimo grpc clienta
-	client := pb.NewMessageBoardClient(conn)
-	// naredimo uporabnika
-	user, err := client.CreateUser(context.Background(), &pb.CreateUserRequest{Name: username})
-	if err != nil {
-		conn.Close() // zapremo, ker ne bomo vrnili
-		return nil, err
-	}
-	fmt.Printf("Connected to %v as user %s\n", url, user.Name)
-	return conn, client, user, nil*/
 }
