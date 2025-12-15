@@ -72,3 +72,28 @@ func (server *MessageBoardServer) getUserByName(name string) (*pb.User, bool) {
 	}
 	return nil, false
 }
+
+func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostMessageRequest) (*pb.Message, error) {
+	// preverimo če user obstaja
+	user, ok := server.users[req.UserId]
+	if !ok {
+		return nil, fmt.Errorf("user with id %d not found", req.UserId)
+	}
+
+	// ustvari novo sporočilo
+	msg := &pb.Message{
+		Id:        server.nextMessageID,
+		TopicId:   req.TopicId,
+		UserId:    user.Id,
+		Text:      req.Text,
+		Likes:     0,
+		CreatedAt: nil, // za enkrat
+	}
+
+	// shranimo sporočilo v mapo
+	server.messages[msg.Id] = msg
+	server.nextMessageID++
+
+	fmt.Printf("New message by %s: [%d] %s\n", user.Name, msg.Id, msg.Text)
+	return msg, nil
+}
