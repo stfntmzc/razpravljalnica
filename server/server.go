@@ -53,13 +53,13 @@ func StartServer(url string) {
 func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
 	user, exists := server.getUserByName(req.Name)
 	if exists {
-		fmt.Printf("USER JOINED: Name=%s, Id=%d\n", user.Name, user.Id)
+		fmt.Printf("USER CONNECTED: Name=%s, Id=%d\n", user.Name, user.Id)
 		return user, nil
 	} else {
 		newUser := &pb.User{Id: server.nextUserID, Name: req.Name}
 		server.users[newUser.Id] = newUser
 		server.nextUserID++
-		fmt.Printf("NEW USER: Name=%s, Id=%d\n", newUser.Name, newUser.Id)
+		fmt.Printf("NEW USER CONNECTED: Name=%s, Id=%d\n", newUser.Name, newUser.Id)
 		return newUser, nil
 	}
 }

@@ -58,6 +58,7 @@ service  MessageBoard{
 
   // Creates a new user and assigns it an id
   rpc CreateUser(CreateUserRequest) returns (User);
+  // ok
 
   // Creates a new topic to which users can post messages
   rpc CreateTopic(CreateTopicRequest) returns (Topic);

@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type CommandHandler func(ctx context.Context, cancel context.CancelFunc, args []string)
+type CommandHandler func(clientState *ClientState, args []string)
 type ClientState struct {
 	conn   *grpc.ClientConn
 	rpc    pb.MessageBoardClient
@@ -35,21 +35,18 @@ func Client(url string, username string) {
 	// inicializacija mape komand
 	initCommandHandlers()
 
-	// kontekst
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// povežemo se na strežnik
-	conn, client, user, err := connectToServer(url, username)
+	clientState, err := connectToServer(url, username)
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
+	defer clientState.conn.Close()
+
 	// main loop
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		select {
-		case <-ctx.Done():
+		case <-clientState.ctx.Done():
 			fmt.Println("Client exiting...")
 			return
 		default:
@@ -62,7 +59,7 @@ func Client(url string, username string) {
 				continue
 			}
 			//fmt.Println("ukaz:", line)
-			handleInput(ctx, cancel, line)
+			handleInput(clientState, line)
 		}
 
 	}
@@ -73,7 +70,7 @@ func initCommandHandlers() {
 	commands["/write"] = writeHandler
 }
 
-func handleInput(ctx context.Context, cancel context.CancelFunc, line string) {
+func handleInput(clientState *ClientState, line string) {
 	// tokenize
 	tokens := strings.Fields(line)
 	if len(tokens) == 0 {
@@ -82,7 +79,7 @@ func handleInput(ctx context.Context, cancel context.CancelFunc, line string) {
 	commandName := tokens[0]
 	args := tokens[1:]
 	if cmd, ok := commands[commandName]; ok {
-		cmd(ctx, cancel, args)
+		cmd(clientState, args)
 	} else {
 		fmt.Println("Unknown command:", commandName)
 	}
@@ -90,13 +87,13 @@ func handleInput(ctx context.Context, cancel context.CancelFunc, line string) {
 
 // start: commands =====================
 
-func writeHandler(ctx context.Context, cancel context.CancelFunc, args []string) {
+func writeHandler(clientState *ClientState, args []string) {
 	//fmt.Println("write; argumenti", args)
-
+	//message := pb.NewMessage
 }
 
-func quitHandler(ctx context.Context, cancel context.CancelFunc, args []string) {
-	cancel()
+func quitHandler(clientState *ClientState, args []string) {
+	clientState.cancel()
 }
 
 // end: commands =======================
