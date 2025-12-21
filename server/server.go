@@ -11,10 +11,16 @@ import (
 	pb "razpravljalnica/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+// =============================================
+// MESSAGEBOARD SERVER
 
 type MessageBoardServer struct {
 	pb.UnimplementedMessageBoardServer
+	topics        map[int64]*pb.Topic
+	nextTopicID   int64
 	messages      map[int64]*pb.Message
 	nextMessageID int64
 	users         map[int64]*pb.User
@@ -23,12 +29,17 @@ type MessageBoardServer struct {
 
 func NewMessageBoardServer() *MessageBoardServer {
 	return &MessageBoardServer{
+		topics:        make(map[int64]*pb.Topic, 0),
+		nextTopicID:   1,
 		messages:      make(map[int64]*pb.Message, 0),
 		nextMessageID: 1,
 		users:         make(map[int64]*pb.User, 0),
 		nextUserID:    1,
 	}
 }
+
+// MESSAGEBOARD SERVER
+// =============================================
 
 func StartServer(url string) {
 	// pripravimo grpc strežnik
@@ -50,6 +61,14 @@ func StartServer(url string) {
 	}
 }
 
+// =============================================
+// MESSAGEBOARD SERVER FUNKCIJE
+
+func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
+	fmt.Println("CreateTopic not implemented")
+	return nil, nil
+}
+
 func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
 	user, exists := server.getUserByName(req.Name)
 	if exists {
@@ -64,6 +83,7 @@ func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.Create
 	}
 }
 
+// pomozna
 func (server *MessageBoardServer) getUserByName(name string) (*pb.User, bool) {
 	for _, user := range server.users {
 		if user.Name == name {
@@ -97,3 +117,45 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	fmt.Printf("New message by %s: [%d] %s\n", user.Name, msg.Id, msg.Text)
 	return msg, nil
 }
+
+func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
+	fmt.Println("UpdateMessage not implemented")
+	return nil, nil
+}
+
+func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.DeleteMessageRequest) (*emptypb.Empty, error) {
+	fmt.Println("DeleteMessage not implemented")
+	// flase => ni se deletal (recimo message ne obstaja itd)
+	// true => message zbrisan
+	return &emptypb.Empty{}, nil
+}
+
+func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
+	fmt.Println("LikeMessage not implemented")
+	return nil, nil
+}
+
+func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
+	fmt.Println("ListTopics not implemented")
+	return nil, nil
+}
+
+func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMessagesRequest) (*pb.GetMessagesResponse, error) {
+	fmt.Println("GetMessages not implemented")
+	return nil, nil
+}
+
+// subscribe stvari
+func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *pb.SubscriptionNodeRequest) (*pb.SubscriptionNodeResponse, error) {
+	fmt.Println("GetSubscriptionNode not implemented")
+	return nil, nil
+}
+
+func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
+	// context je ze v stream objektu
+	fmt.Println("SubscribeTopic not implemented")
+	return nil
+}
+
+// MESSAGEBOARD SERVER FUNKCIJE
+// =============================================
