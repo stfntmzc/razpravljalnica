@@ -11,6 +11,8 @@ import (
 	pb "razpravljalnica/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -65,8 +67,27 @@ func StartServer(url string) {
 // MESSAGEBOARD SERVER FUNKCIJE
 
 func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
-	fmt.Println("CreateTopic not implemented")
-	return nil, nil
+	//fmt.Println("CreateTopic not implemented")
+	topic, exists := server.getTopicByName(req.Name)
+	if exists {
+		fmt.Printf("NEW TOPIC ATTEMPT BY %s [%d], BUT TOPIC ALREADY EXISTS: Name=%s, Id=%d\n", server.users[req.UserId].Name, req.UserId, topic.Name, topic.Id)
+		return nil, status.Errorf(codes.AlreadyExists, "topic '%s' already exists", req.Name)
+	}
+	newTopic := &pb.Topic{Id: server.nextTopicID, Name: req.Name}
+	server.topics[newTopic.Id] = newTopic
+	server.nextTopicID++
+	fmt.Printf("NEW TOPIC CREATED BY %s [%d]: Name=%s, Id=%d\n", server.users[req.UserId].Name, req.UserId, newTopic.Name, newTopic.Id)
+	return newTopic, nil
+}
+
+// pomozna
+func (server *MessageBoardServer) getTopicByName(name string) (*pb.Topic, bool) {
+	for _, topic := range server.topics {
+		if topic.Name == name {
+			return topic, true
+		}
+	}
+	return nil, false
 }
 
 func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
@@ -74,13 +95,12 @@ func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.Create
 	if exists {
 		fmt.Printf("USER CONNECTED: Name=%s, Id=%d\n", user.Name, user.Id)
 		return user, nil
-	} else {
-		newUser := &pb.User{Id: server.nextUserID, Name: req.Name}
-		server.users[newUser.Id] = newUser
-		server.nextUserID++
-		fmt.Printf("NEW USER CONNECTED: Name=%s, Id=%d\n", newUser.Name, newUser.Id)
-		return newUser, nil
 	}
+	newUser := &pb.User{Id: server.nextUserID, Name: req.Name}
+	server.users[newUser.Id] = newUser
+	server.nextUserID++
+	fmt.Printf("NEW USER CONNECTED: Name=%s, Id=%d\n", newUser.Name, newUser.Id)
+	return newUser, nil
 }
 
 // pomozna

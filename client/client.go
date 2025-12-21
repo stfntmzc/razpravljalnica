@@ -68,6 +68,7 @@ func Client(url string, username string) {
 func initCommandHandlers() {
 	commands["/q"] = quitHandler
 	commands["/write"] = writeHandler
+	commands["/newtopic"] = newtopicHandler
 }
 
 func handleInput(clientState *ClientState, line string) {
@@ -114,6 +115,25 @@ func writeHandler(clientState *ClientState, args []string) {
 func quitHandler(clientState *ClientState, args []string) {
 	// pošlje signal v kanal
 	clientState.cancel()
+}
+
+func newtopicHandler(clientState *ClientState, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: /newtopic <name_of_new_topic>")
+		return
+	}
+
+	name := strings.Join(args, " ")
+	req := &pb.CreateTopicRequest{
+		Name:   name,
+		UserId: clientState.user.Id,
+	}
+	topic, err := clientState.rpc.CreateTopic(clientState.ctx, req)
+	if err != nil {
+		fmt.Println("Error creating topic:", err)
+		return
+	}
+	fmt.Printf("New topic created: %s\n", topic.Name)
 }
 
 // COMMANDS
