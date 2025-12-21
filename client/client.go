@@ -85,7 +85,8 @@ func handleInput(clientState *ClientState, line string) {
 	}
 }
 
-// start: commands ==========================================
+// =============================================
+// COMMANDS
 
 func writeHandler(clientState *ClientState, args []string) {
 	if len(args) == 0 {
@@ -115,9 +116,13 @@ func quitHandler(clientState *ClientState, args []string) {
 	clientState.cancel()
 }
 
-// end: commands ============================================
+// COMMANDS
+// =============================================
 
 func connectToServer(url string, username string) (*ClientState, error) {
+
+	// tle mislm da je treba še narest da se connecta na head in na tail
+
 	// konteks, funkcija za ugasnt
 	ctx, cancel := context.WithCancel(context.Background())
 	// connection
