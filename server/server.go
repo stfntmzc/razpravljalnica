@@ -160,34 +160,28 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
 
-	topic_id, err := req.topic_id
-	message_id := req.message_id
-	user_id  := req.user_id
+	topic_id, err := req.TopicId
+	message_id := req.MesssageId
+	user_id  := req.UserId
 
 	message, ok := server.messages[message_id]
 	if !ok {
 		// message ne obstaja
 		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST", message_id)
-		return nil, fmt.Error("message with id %d not found", message_id))
+		return nil, fmt.Errorf("message with id %d not found", message_id))
 	}
 
-	message.likes += 1
+	message.Likes += 1
 
 	return message, nil
 }
 
 func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
 
-	topics_slice, ok := slices.Collect(maps.Keys(server.topics))
+	topics_slice := slices.Collect(maps.Keys(server.topics))
 	
-	if !ok {
-		// ni slo convertat mape v slice
-		fmt.Printf("FALIED TO CONVERT MAP TO A SLICE")
-		return nil, fmt.Error("failed to convert map to a slice")
-	}
-	
-	response := &ListTopicsResponse {
-		topics: topics_slice
+	response := &pb.ListTopicsResponse {
+		Topics: topics_slice
 	}
 
 
@@ -195,27 +189,23 @@ func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.E
 }
 
 func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMessagesRequest) (*pb.GetMessagesResponse, error) {
-	topic_id := req.topic_id
-	from_id := req.from_message_id
-	limit := req.limit
+	topic_id := req.TopicId
+	from_id := req.FromMessageId
+	limit := req.Limit
 
-	messages_slice, ok := make([]*pb.Message, 0, limit)
+	messages_slice := make([]*pb.Message, 0, limit)
 
-	if !ok {
-		fmt.Printf("FAILED TO CREATE A MESSAGE SLICE")
-		return nil, fmt.Error("failed to create a message slice")
-	}
-	i = 0
+	i := 0
 
-	for _, message := range server.messages {
+	for _, message := range server.Messages {
 		if from_id == message.UserId && topic_id == message.TopicId && i < limit {
 			i += 1
-			message_slice = append(messessages_slice, message)
+			message_slice = append(messages_slice, message)
 		}
 	}
 
-	response := &GetMessagesResponse {
-		topics: messages_slice
+	response := &pb.GetMessagesResponse {
+		Messages: messages_slice
 	}
 
 
