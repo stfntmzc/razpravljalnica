@@ -90,13 +90,20 @@ func handleInput(clientState *ClientState, line string) {
 // COMMANDS
 
 func writeHandler(clientState *ClientState, args []string) {
-	if len(args) == 0 {
-		fmt.Println("Usage: /write <text>")
+	if len(args) <= 1 {
+		fmt.Println("Usage: /write <topic_id> <text>")
 		return
 	}
 
-	text := strings.Join(args, " ")
-	topicID := int64(1) // za enkrat
+	var topicID int64
+	_, err := fmt.Sscan(args[0], &topicID)
+	if err != nil {
+		fmt.Println("Invalid topic_id (must be a number)")
+		return
+	}
+
+	text := strings.Join(args[1:], " ")
+	//topicID := int64(1) // za enkrat
 	// naredimo message request
 	req := &pb.PostMessageRequest{
 		TopicId: topicID,
@@ -109,7 +116,7 @@ func writeHandler(clientState *ClientState, args []string) {
 		fmt.Println("Error posting message:", err)
 		return
 	}
-	fmt.Printf("Message posted: %s\n", message.Text)
+	fmt.Printf("Message posted on topic %d: %s\n", message.TopicId, message.Text)
 }
 
 func quitHandler(clientState *ClientState, args []string) {
@@ -133,7 +140,7 @@ func newtopicHandler(clientState *ClientState, args []string) {
 		fmt.Println("Error creating topic:", err)
 		return
 	}
-	fmt.Printf("New topic created: %s\n", topic.Name)
+	fmt.Printf("New topic created: Name=%s, Id=%d\n", topic.Name, topic.Id)
 }
 
 // COMMANDS

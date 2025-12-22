@@ -70,13 +70,13 @@ func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.Creat
 	//fmt.Println("CreateTopic not implemented")
 	topic, exists := server.getTopicByName(req.Name)
 	if exists {
-		fmt.Printf("NEW TOPIC ATTEMPT BY %s [%d], BUT TOPIC ALREADY EXISTS: Name=%s, Id=%d\n", server.users[req.UserId].Name, req.UserId, topic.Name, topic.Id)
-		return nil, status.Errorf(codes.AlreadyExists, "topic '%s' already exists", req.Name)
+		fmt.Printf("NEW TOPIC ATTEMPT BY [%d] %s, BUT TOPIC ALREADY EXISTS: Name=%s, Id=%d\n", req.UserId, server.users[req.UserId].Name, topic.Name, topic.Id)
+		return nil, status.Errorf(codes.AlreadyExists, "topic '%s' already exists\n", req.Name)
 	}
 	newTopic := &pb.Topic{Id: server.nextTopicID, Name: req.Name}
 	server.topics[newTopic.Id] = newTopic
 	server.nextTopicID++
-	fmt.Printf("NEW TOPIC CREATED BY %s [%d]: Name=%s, Id=%d\n", server.users[req.UserId].Name, req.UserId, newTopic.Name, newTopic.Id)
+	fmt.Printf("NEW TOPIC CREATED BY [%d] %s: Name=%s, Id=%d\n", req.UserId, server.users[req.UserId].Name, newTopic.Name, newTopic.Id)
 	return newTopic, nil
 }
 
@@ -117,13 +117,20 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	// preverimo če user obstaja
 	user, ok := server.users[req.UserId]
 	if !ok {
+		// user not found !!!!!! neki čudnega se dogaja
 		return nil, fmt.Errorf("user with id %d not found", req.UserId)
+	}
+	// preverimo ce topic obstaja
+	topic, ok := server.topics[req.TopicId]
+	if !ok {
+		fmt.Printf("NEW MESSAGE ATTEMPT BY [%d] %s, BUT TOPIC WITH ID %d DOES NOT EXIST\n", user.Id, user.Name, req.TopicId)
+		return nil, fmt.Errorf("topic with id %d not found", req.TopicId)
 	}
 
 	// ustvari novo sporočilo
 	msg := &pb.Message{
 		Id:        server.nextMessageID,
-		TopicId:   req.TopicId,
+		TopicId:   topic.Id,
 		UserId:    user.Id,
 		Text:      req.Text,
 		Likes:     0,
@@ -134,7 +141,7 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	server.messages[msg.Id] = msg
 	server.nextMessageID++
 
-	fmt.Printf("New message by %s: [%d] %s\n", user.Name, msg.Id, msg.Text)
+	fmt.Printf("NEW MESSAGE BY [%d] %s ON TOPIC [%d] %s: [%d] %s\n", user.Id, user.Name, topic.Id, topic.Name, msg.Id, msg.Text)
 	return msg, nil
 }
 
