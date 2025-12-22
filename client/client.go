@@ -69,21 +69,16 @@ func initCommandHandlers() {
 	commands["/q"] = quitHandler
 	commands["/write"] = writeHandler
 	commands["/newtopic"] = newtopicHandler
+	commands["/edit"] = editHandler
+	commands["/del"] = delHandler
+	commands["/like"] = likeHandler
+	commands["/topics"] = listTopicsHandler
+	commands["/messages"] = listMessagesHandler
+	commands["/node"] = getSubscriptionNodeHandler
+	commands["/subscribe"] = subscribtionHandler
 }
 
 func handleInput(clientState *ClientState, line string) {
-	// tokenize
-	tokens := strings.Fields(line)
-	if len(tokens) == 0 {
-		return
-	}
-	commandName := tokens[0]
-	args := tokens[1:]
-	if cmd, ok := commands[commandName]; ok {
-		cmd(clientState, args)
-	} else {
-		fmt.Println("Unknown command:", commandName)
-	}
 }
 
 // =============================================
@@ -141,6 +136,98 @@ func newtopicHandler(clientState *ClientState, args []string) {
 		return
 	}
 	fmt.Printf("New topic created: Name=%s, Id=%d\n", topic.Name, topic.Id)
+}
+
+func editHandler(clientState *ClientState, args []string) {
+	if len(args) <= 1 {
+		fmt.Println("Usage: /edit <message_id> <updated_message>")
+		return
+	}
+	var messageId int64
+	_, err := fmt.Sscan(args[0], &messageId)
+	if err != nil {
+		fmt.Println("Invalid message_id (must be a number)")
+		return
+	}
+	text := strings.Join(args[1:], " ")
+	req := &pb.UpdateMessageRequest{
+		MessageId: messageId,
+		Text:      text,
+	}
+	message, err := clientState.rpc.UpdateMessage(clientState.ctx, req)
+	if err != nil {
+		fmt.Println("Error updating message:", err)
+		return
+	}
+	fmt.Printf("Message updated: Text=%s, Id=%d\n", message.Text, message.Id)
+}
+
+func delHandler(clientState *ClientState, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: /del <message_id>")
+		return
+	}
+	var messageId int64
+	_, err1 := fmt.Sscan(args[0], &messageId)
+	if err1 != nil {
+		fmt.Println("Invalid message_id (must be a number)")
+		return
+	}
+	req := &pb.DeleteMessageRequest{
+		MessageId: messageId,
+		UserId:    clientState.user.Id,
+	}
+	_, err2 := clientState.rpc.DeleteMessage(clientState.ctx, req)
+	if err2 != nil {
+		fmt.Println("Error deleting message:", err2)
+		return
+	}
+	fmt.Printf("Message with id %d deleted\n", messageId)
+}
+
+func likeHandler(clientState *ClientState, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: /like <post_id>")
+		return
+	}
+	if len(args) > 2 {
+		fmt.Println("Too many arguments")
+		return
+	}
+	
+	var messsageId int64
+	_, err1 = fmt.Sscan(args[0], &messageId)
+	if err1 != nil {
+		fmt.Println("Invalid message_id (must be a number)")
+		return
+	}
+
+	req := &pb.LikeMessageRequest{
+		TopicId: 0 // se za implementirat po zelji
+		MessageId: messageId
+		UserId: 0 // se za impplementirat po zelji
+	}
+
+	_, err2 = clientState.rpc.LikeMessage(clientState.ctx, req)
+	if err2 != nil {
+		fmt.Println("Error liking message:", err2)
+		return
+	}
+	
+	fmt.Printf("Successfully liked a message with id: %d!", messageId)
+}
+
+func listTopicsHandler(clientState *ClientState, args []string) {
+	fmt.Println("Prelen da bi implementiral rn")
+}
+func listMessagesHandler(clientState *ClientState, args []string) {
+	fmt.Println("Prelen da bi implementiral rn")
+}
+func getSubscriptionNodeHandler(clientState *ClientState, args []string) {
+	fmt.Println("Prelen da bi implementiral rn")
+}
+func subscribtionHandler(clientState *ClientState, args []string) {
+	fmt.Println("Prelen da bi implementiral rn")
 }
 
 // COMMANDS
