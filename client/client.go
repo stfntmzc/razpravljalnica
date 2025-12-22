@@ -70,6 +70,7 @@ func initCommandHandlers() {
 	commands["/write"] = writeHandler
 	commands["/newtopic"] = newtopicHandler
 	commands["/edit"] = editHandler
+	commands["/del"] = delHandler
 }
 
 func handleInput(clientState *ClientState, line string) {
@@ -166,6 +167,29 @@ func editHandler(clientState *ClientState, args []string) {
 		return
 	}
 	fmt.Printf("Message updated: Text=%s, Id=%d\n", message.Text, message.Id)
+}
+
+func delHandler(clientState *ClientState, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: /del <message_id>")
+		return
+	}
+	var messageId int64
+	_, err1 := fmt.Sscan(args[0], &messageId)
+	if err1 != nil {
+		fmt.Println("Invalid message_id (must be a number)")
+		return
+	}
+	req := &pb.DeleteMessageRequest{
+		MessageId: messageId,
+		UserId:    clientState.user.Id,
+	}
+	_, err2 := clientState.rpc.DeleteMessage(clientState.ctx, req)
+	if err2 != nil {
+		fmt.Println("Error deleting message:", err2)
+		return
+	}
+	fmt.Printf("Message with id %d deleted\n", messageId)
 }
 
 // COMMANDS

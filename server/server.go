@@ -146,8 +146,6 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 }
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
-	//fmt.Println("UpdateMessage not implemented")
-	// preverimo če obstaja
 	msg := server.messages[req.MessageId]
 	if msg == nil {
 		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
@@ -159,9 +157,13 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 }
 
 func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.DeleteMessageRequest) (*emptypb.Empty, error) {
-	fmt.Println("DeleteMessage not implemented")
-	// flase => ni se deletal (recimo message ne obstaja itd)
-	// true => message zbrisan
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		fmt.Printf("DELETE MESSAGE ATTEMPT BY [%d] %s, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, server.users[req.UserId].Name, req.MessageId)
+		return &emptypb.Empty{}, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+	delete(server.messages, req.MessageId)
+	fmt.Printf("MESSAGE WITH ID %d DELETED\n", req.MessageId)
 	return &emptypb.Empty{}, nil
 }
 
