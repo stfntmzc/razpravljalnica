@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	pb "razpravljalnica/proto"
+	"maps"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -158,18 +159,67 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 }
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
-	fmt.Println("LikeMessage not implemented")
-	return nil, nil
+
+	topic_id, err := req.topic_id
+	message_id := req.message_id
+	user_id  := req.user_id
+
+	message, ok := server.messages[message_id]
+	if !ok {
+		// message ne obstaja
+		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST", message_id)
+		return nil, fmt.Error("message with id %d not found", message_id))
+	}
+
+	message.likes += 1
+
+	return message, nil
 }
 
 func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
-	fmt.Println("ListTopics not implemented")
-	return nil, nil
+
+	topics_slice, ok := slices.Collect(maps.Keys(server.topics))
+	
+	if !ok {
+		// ni slo convertat mape v slice
+		fmt.Printf("FALIED TO CONVERT MAP TO A SLICE")
+		return nil, fmt.Error("failed to convert map to a slice")
+	}
+	
+	response := &ListTopicsResponse {
+		topics: topics_slice
+	}
+
+
+	return response, nil
 }
 
 func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMessagesRequest) (*pb.GetMessagesResponse, error) {
-	fmt.Println("GetMessages not implemented")
-	return nil, nil
+	topic_id := req.topic_id
+	from_id := req.from_message_id
+	limit := req.limit
+
+	messages_slice, ok := make([]*pb.Message, 0, limit)
+
+	if !ok {
+		fmt.Printf("FAILED TO CREATE A MESSAGE SLICE")
+		return nil, fmt.Error("failed to create a message slice")
+	}
+	i = 0
+
+	for _, message := range server.messages {
+		if from_id == message.UserId && topic_id == message.TopicId && i < limit {
+			i += 1
+			message_slice = append(messessages_slice, message)
+		}
+	}
+
+	response := &GetMessagesResponse {
+		topics: messages_slice
+	}
+
+
+	return response, nil
 }
 
 // subscribe stvari
