@@ -69,6 +69,7 @@ func initCommandHandlers() {
 	commands["/q"] = quitHandler
 	commands["/write"] = writeHandler
 	commands["/newtopic"] = newtopicHandler
+	commands["/edit"] = editHandler
 }
 
 func handleInput(clientState *ClientState, line string) {
@@ -141,6 +142,30 @@ func newtopicHandler(clientState *ClientState, args []string) {
 		return
 	}
 	fmt.Printf("New topic created: Name=%s, Id=%d\n", topic.Name, topic.Id)
+}
+
+func editHandler(clientState *ClientState, args []string) {
+	if len(args) <= 1 {
+		fmt.Println("Usage: /edit <message_id> <updated_message>")
+		return
+	}
+	var messageId int64
+	_, err := fmt.Sscan(args[0], &messageId)
+	if err != nil {
+		fmt.Println("Invalid message_id (must be a number)")
+		return
+	}
+	text := strings.Join(args[1:], " ")
+	req := &pb.UpdateMessageRequest{
+		MessageId: messageId,
+		Text:      text,
+	}
+	message, err := clientState.rpc.UpdateMessage(clientState.ctx, req)
+	if err != nil {
+		fmt.Println("Error updating message:", err)
+		return
+	}
+	fmt.Printf("Message updated: Text=%s, Id=%d\n", message.Text, message.Id)
 }
 
 // COMMANDS
