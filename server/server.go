@@ -135,7 +135,7 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 		UserId:    user.Id,
 		Text:      req.Text,
 		Likes:     0,
-		CreatedAt: nil, // za enkrat
+		CreatedAt: timestamppb.Now(), // za enkrat
 	}
 
 	// shranimo sporočilo v mapo
@@ -173,6 +173,8 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 
 	message.Likes += 1
 
+	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d", message_id, topic_id)
+
 	return message, nil
 }
 
@@ -183,7 +185,8 @@ func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.E
 	response := &pb.ListTopicsResponse {
 		Topics: topics_slice,
 	}
-
+	
+	fmt.Printf("SUCCESSFULLY LISTED ALL TOPICS!")
 
 	return response, nil
 }
@@ -208,7 +211,7 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 		Messages: messages_slice
 	}
 
-
+	fmt.printf("SUCCESSFULLY GOT ALL MESSAGES")
 	return response, nil
 }
 
