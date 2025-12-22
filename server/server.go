@@ -160,15 +160,15 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
 
-	topic_id, err := req.TopicId
-	message_id := req.MesssageId
+	topic_id := req.TopicId
+	message_id := req.MessageId
 	user_id  := req.UserId
 
 	message, ok := server.messages[message_id]
 	if !ok {
 		// message ne obstaja
 		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST", message_id)
-		return nil, fmt.Errorf("message with id %d not found", message_id))
+		return nil, fmt.Errorf("message with id %d not found", message_id)
 	}
 
 	message.Likes += 1
@@ -178,10 +178,10 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 
 func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
 
-	topics_slice := slices.Collect(maps.Keys(server.topics))
+	topics_slice := slices.Collect(maps.Values(server.topics))
 	
 	response := &pb.ListTopicsResponse {
-		Topics: topics_slice
+		Topics: topics_slice,
 	}
 
 
@@ -197,10 +197,10 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 
 	i := 0
 
-	for _, message := range server.Messages {
-		if from_id == message.UserId && topic_id == message.TopicId && i < limit {
+	for _, message := range server.messages {
+		if from_id <= message.Id && topic_id == message.TopicId && i < limit {
 			i += 1
-			message_slice = append(messages_slice, message)
+			messages_slice = append(messages_slice, message)
 		}
 	}
 
