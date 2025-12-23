@@ -28,6 +28,9 @@ type MessageBoardServer struct {
 	nextMessageID int64
 	users         map[int64]*pb.User
 	nextUserID    int64
+	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
+	subscribersMu: sync.RWMutex,
+	nextSeqNum: int64
 }
 
 func NewMessageBoardServer() *MessageBoardServer {
@@ -38,6 +41,8 @@ func NewMessageBoardServer() *MessageBoardServer {
 		nextMessageID: 1,
 		users:         make(map[int64]*pb.User, 0),
 		nextUserID:    1,
+		subscribers:   make(map[int64][]chan *pb.MessageEvent),
+		nextSeqNum:    1
 	}
 }
 
@@ -222,9 +227,57 @@ func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *
 }
 
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
-	// context je ze v stream objektu
-	fmt.Println("SubscribeTopic not implemented")
-	return nil
+	ch := make(chan *pb.MessageEvent, 100)
+	server.subscribersMu.Lock()
+	for _, topicId := range req.TopicId {
+			s.subscribers[topicId] = append(s.subscribers[topicId], ch)
+	}
+	server.subscribersMu.Unock()
+
+	defer func() {
+		server.subscribersMu.Lock()
+		for _, topicId := range req.Top {
+			  for i, c := range channels {
+						if c == ch {
+								server.subscribers[topicId] = append(channels[:i], channels[i+1:]...)
+								break
+						}
+				}
+		}
+		server.subscribersMu.Unlock()
+		close(ch)
+	}()
+	for {
+			select {
+			case event := <-ch:
+					if err := stream.Send(event); err != nil {
+							return err
+					}
+			case <-stream.Context().Done():
+					return nil
+			}
+	}
+}
+
+// helper funkcija
+func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb.Message) {
+    event := &pb.MessageEvent{
+        SequenceNumber: server.nextSeqNum,
+        Op:             op,
+        Message:        msg,
+        EventAt:        timestamppb.Now(),
+    }
+    server.nextSeqNum++
+    
+    server.subscribersMu.RLock()
+    for _, ch := range server.subscribers[topicId] {
+        select {
+        case ch <- event:
+        default:
+            // poln kanal
+				}
+    }
+    server.subscribersMu.RUnlock()
 }
 
 // MESSAGEBOARD SERVER FUNKCIJE
