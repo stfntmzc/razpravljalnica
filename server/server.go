@@ -7,13 +7,18 @@ package server
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	pb "razpravljalnica/proto"
+
+	"slices"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // =============================================
@@ -27,6 +32,9 @@ type MessageBoardServer struct {
 	nextMessageID int64
 	users         map[int64]*pb.User
 	nextUserID    int64
+	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
+	subscribersMu sync.RWMutex
+	nextSeqNum    int64
 }
 
 func NewMessageBoardServer() *MessageBoardServer {
@@ -37,6 +45,8 @@ func NewMessageBoardServer() *MessageBoardServer {
 		nextMessageID: 1,
 		users:         make(map[int64]*pb.User, 0),
 		nextUserID:    1,
+		subscribers:   make(map[int64][]chan *pb.MessageEvent),
+		nextSeqNum:    1,
 	}
 }
 
@@ -134,7 +144,7 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 		UserId:    user.Id,
 		Text:      req.Text,
 		Likes:     0,
-		CreatedAt: nil, // za enkrat
+		CreatedAt: timestamppb.Now(), // za enkrat
 	}
 
 	// shranimo sporočilo v mapo
@@ -142,6 +152,9 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	server.nextMessageID++
 
 	fmt.Printf("NEW MESSAGE BY [%d] %s ON TOPIC [%d] %s: [%d] %s\n", user.Id, user.Name, topic.Id, topic.Name, msg.Id, msg.Text)
+
+	// modified da se lahko broadcasta
+	server.broadcast(msg.TopicId, pb.OpType_OP_POST, msg)
 	return msg, nil
 }
 
@@ -153,6 +166,9 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 	oldText := msg.Text
 	server.messages[req.MessageId].Text = req.Text
 	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
+
+	// same here
+	server.broadcast(msg.TopicId, pb.OpType_OP_UPDATE, msg)
 	return server.messages[req.MessageId], nil
 }
 
@@ -164,22 +180,67 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 	}
 	delete(server.messages, req.MessageId)
 	fmt.Printf("MESSAGE WITH ID %d DELETED\n", req.MessageId)
+	// same here
+	server.broadcast(msg.TopicId, pb.OpType_OP_DELETE, msg)
 	return &emptypb.Empty{}, nil
 }
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
-	fmt.Println("LikeMessage not implemented")
-	return nil, nil
+
+	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
+	topic_id := req.TopicId
+	message_id := req.MessageId
+	// user_id  := req.UserId
+
+	message, ok := server.messages[message_id]
+	if !ok {
+		// message ne obstaja
+		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST\n", message_id)
+		return nil, fmt.Errorf("message with id %d not found", message_id)
+	}
+
+	message.Likes += 1
+
+	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d\n", message_id, topic_id)
+	server.broadcast(message.TopicId, pb.OpType_OP_LIKE, message)
+	return message, nil
 }
 
 func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
-	fmt.Println("ListTopics not implemented")
-	return nil, nil
+
+	topics_slice := slices.Collect(maps.Values(server.topics))
+
+	response := &pb.ListTopicsResponse{
+		Topics: topics_slice,
+	}
+
+	fmt.Printf("SUCCESSFULLY LISTED ALL TOPICS!\n")
+
+	return response, nil
 }
 
 func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMessagesRequest) (*pb.GetMessagesResponse, error) {
-	fmt.Println("GetMessages not implemented")
-	return nil, nil
+	topic_id := req.TopicId
+	from_id := req.FromMessageId
+	limit := req.Limit
+
+	messages_slice := make([]*pb.Message, 0, limit)
+
+	i := int32(0)
+
+	for _, message := range server.messages {
+		if from_id <= message.Id && topic_id == message.TopicId && i < limit {
+			i += 1
+			messages_slice = append(messages_slice, message)
+		}
+	}
+
+	response := &pb.GetMessagesResponse{
+		Messages: messages_slice,
+	}
+
+	fmt.Printf("SUCCESSFULLY GOT ALL MESSAGES\n")
+	return response, nil
 }
 
 // subscribe stvari
@@ -189,9 +250,60 @@ func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *
 }
 
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
-	// context je ze v stream objektu
-	fmt.Println("SubscribeTopic not implemented")
-	return nil
+	ch := make(chan *pb.MessageEvent, 100)
+
+	server.subscribersMu.Lock()
+	for _, topicId := range req.TopicId {
+		server.subscribers[topicId] = append(server.subscribers[topicId], ch)
+	}
+	server.subscribersMu.Unlock()
+
+	defer func() {
+		server.subscribersMu.Lock()
+		for _, topicId := range req.TopicId {
+			channels := server.subscribers[topicId]
+			for i, c := range channels {
+				if c == ch {
+					server.subscribers[topicId] = append(channels[:i], channels[i+1:]...)
+					break
+				}
+			}
+		}
+		server.subscribersMu.Unlock()
+		close(ch)
+	}()
+
+	for {
+		select {
+		case event := <-ch:
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			return nil
+		}
+	}
+}
+
+// helper funkcija
+func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb.Message) {
+	event := &pb.MessageEvent{
+		SequenceNumber: server.nextSeqNum,
+		Op:             op,
+		Message:        msg,
+		EventAt:        timestamppb.Now(),
+	}
+	server.nextSeqNum++
+
+	server.subscribersMu.RLock()
+	for _, ch := range server.subscribers[topicId] {
+		select {
+		case ch <- event:
+		default:
+			// poln kanal
+		}
+	}
+	server.subscribersMu.RUnlock()
 }
 
 // MESSAGEBOARD SERVER FUNKCIJE
