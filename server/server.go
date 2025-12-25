@@ -15,6 +15,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"slices"
+	"sync"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // =============================================
@@ -29,8 +32,8 @@ type MessageBoardServer struct {
 	users         map[int64]*pb.User
 	nextUserID    int64
 	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
-	subscribersMu: sync.RWMutex,
-	nextSeqNum: int64
+	subscribersMu sync.RWMutex,
+	nextSeqNum int64
 }
 
 func NewMessageBoardServer() *MessageBoardServer {
@@ -42,7 +45,7 @@ func NewMessageBoardServer() *MessageBoardServer {
 		users:         make(map[int64]*pb.User, 0),
 		nextUserID:    1,
 		subscribers:   make(map[int64][]chan *pb.MessageEvent),
-		nextSeqNum:    1
+		nextSeqNum:    1,
 	}
 }
 
@@ -148,18 +151,36 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	server.nextMessageID++
 
 	fmt.Printf("NEW MESSAGE BY [%d] %s ON TOPIC [%d] %s: [%d] %s\n", user.Id, user.Name, topic.Id, topic.Name, msg.Id, msg.Text)
+
+	// modified da se lahko broadcasta
+	server.broadcast(msg.TopicId, pb.OpType_OP_POST, msg)
 	return msg, nil
 }
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
-	fmt.Println("UpdateMessage not implemented")
-	return nil, nil
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+	oldText := msg.Text
+	server.messages[req.MessageId].Text = req.Text
+	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
+	
+	// same here
+	server.broadcast(msg.TopicId, pb.OpType_OP_UPDATE, msg)
+	return server.messages[req.MessageId], nil
 }
 
 func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.DeleteMessageRequest) (*emptypb.Empty, error) {
-	fmt.Println("DeleteMessage not implemented")
-	// flase => ni se deletal (recimo message ne obstaja itd)
-	// true => message zbrisan
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		fmt.Printf("DELETE MESSAGE ATTEMPT BY [%d] %s, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, server.users[req.UserId].Name, req.MessageId)
+		return &emptypb.Empty{}, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+	delete(server.messages, req.MessageId)
+	fmt.Printf("MESSAGE WITH ID %d DELETED\n", req.MessageId)
+	// same here
+	server.broadcast(msg.TopicId, pb.OpType_OP_DELETE, msg)
 	return &emptypb.Empty{}, nil
 }
 
@@ -179,7 +200,7 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 	message.Likes += 1
 
 	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d", message_id, topic_id)
-
+	server.broadcast(message.TopicId, pb.OpType_OP_LIKE, message)
 	return message, nil
 }
 
@@ -226,36 +247,40 @@ func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *
 	return nil, nil
 }
 
+
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
 	ch := make(chan *pb.MessageEvent, 100)
+	
 	server.subscribersMu.Lock()
 	for _, topicId := range req.TopicId {
-			s.subscribers[topicId] = append(s.subscribers[topicId], ch)
+		server.subscribers[topicId] = append(server.subscribers[topicId], ch)
 	}
-	server.subscribersMu.Unock()
+	server.subscribersMu.Unlock()
 
 	defer func() {
 		server.subscribersMu.Lock()
-		for _, topicId := range req.Top {
-			  for i, c := range channels {
-						if c == ch {
-								server.subscribers[topicId] = append(channels[:i], channels[i+1:]...)
-								break
-						}
+		for _, topicId := range req.TopicId {
+			channels := server.subscribers[topicId]
+			for i, c := range channels {
+				if c == ch {
+					server.subscribers[topicId] = append(channels[:i], channels[i+1:]...)
+					break
 				}
+			}
 		}
 		server.subscribersMu.Unlock()
 		close(ch)
 	}()
+
 	for {
-			select {
-			case event := <-ch:
-					if err := stream.Send(event); err != nil {
-							return err
-					}
-			case <-stream.Context().Done():
-					return nil
+		select {
+		case event := <-ch:
+			if err := stream.Send(event); err != nil {
+				return err
 			}
+		case <-stream.Context().Done():
+			return nil
+		}
 	}
 }
 
