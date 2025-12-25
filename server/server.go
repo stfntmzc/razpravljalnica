@@ -32,7 +32,7 @@ type MessageBoardServer struct {
 	users         map[int64]*pb.User
 	nextUserID    int64
 	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
-	subscribersMu sync.RWMutex,
+	subscribersMu sync.RWMutex
 	nextSeqNum int64
 }
 
@@ -185,21 +185,22 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 }
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
-
+	
+	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
 	topic_id := req.TopicId
 	message_id := req.MessageId
-	user_id  := req.UserId
+	// user_id  := req.UserId
 
 	message, ok := server.messages[message_id]
 	if !ok {
 		// message ne obstaja
-		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST", message_id)
+		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST\n", message_id)
 		return nil, fmt.Errorf("message with id %d not found", message_id)
 	}
 
 	message.Likes += 1
 
-	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d", message_id, topic_id)
+	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d\n", message_id, topic_id)
 	server.broadcast(message.TopicId, pb.OpType_OP_LIKE, message)
 	return message, nil
 }
@@ -212,7 +213,7 @@ func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.E
 		Topics: topics_slice,
 	}
 	
-	fmt.Printf("SUCCESSFULLY LISTED ALL TOPICS!")
+	fmt.Printf("SUCCESSFULLY LISTED ALL TOPICS!\n")
 
 	return response, nil
 }
@@ -224,7 +225,7 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 
 	messages_slice := make([]*pb.Message, 0, limit)
 
-	i := 0
+	i := int32(0)
 
 	for _, message := range server.messages {
 		if from_id <= message.Id && topic_id == message.TopicId && i < limit {
@@ -234,10 +235,10 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 	}
 
 	response := &pb.GetMessagesResponse {
-		Messages: messages_slice
+		Messages: messages_slice,
 	}
 
-	fmt.printf("SUCCESSFULLY GOT ALL MESSAGES")
+	fmt.Printf("SUCCESSFULLY GOT ALL MESSAGES\n")
 	return response, nil
 }
 
