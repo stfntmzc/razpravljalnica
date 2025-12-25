@@ -7,16 +7,17 @@ package server
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	pb "razpravljalnica/proto"
-	"maps"
+
+	"slices"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"slices"
-	"sync"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -33,7 +34,7 @@ type MessageBoardServer struct {
 	nextUserID    int64
 	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
 	subscribersMu sync.RWMutex
-	nextSeqNum int64
+	nextSeqNum    int64
 }
 
 func NewMessageBoardServer() *MessageBoardServer {
@@ -127,7 +128,7 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	user, ok := server.users[req.UserId]
 	if !ok {
 		// user not found !!!!!! neki čudnega se dogaja
-		return nil, fmt.Errorf("user with id %d not found", req.UserId)
+		return nil, fmt.Errorf("user with id %d not found\n", req.UserId)
 	}
 	// preverimo ce topic obstaja
 	topic, ok := server.topics[req.TopicId]
@@ -165,7 +166,7 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 	oldText := msg.Text
 	server.messages[req.MessageId].Text = req.Text
 	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
-	
+
 	// same here
 	server.broadcast(msg.TopicId, pb.OpType_OP_UPDATE, msg)
 	return server.messages[req.MessageId], nil
@@ -185,7 +186,7 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 }
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
-	
+
 	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
 	topic_id := req.TopicId
 	message_id := req.MessageId
@@ -208,11 +209,11 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
 
 	topics_slice := slices.Collect(maps.Values(server.topics))
-	
-	response := &pb.ListTopicsResponse {
+
+	response := &pb.ListTopicsResponse{
 		Topics: topics_slice,
 	}
-	
+
 	fmt.Printf("SUCCESSFULLY LISTED ALL TOPICS!\n")
 
 	return response, nil
@@ -234,7 +235,7 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 		}
 	}
 
-	response := &pb.GetMessagesResponse {
+	response := &pb.GetMessagesResponse{
 		Messages: messages_slice,
 	}
 
@@ -248,10 +249,9 @@ func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *
 	return nil, nil
 }
 
-
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
 	ch := make(chan *pb.MessageEvent, 100)
-	
+
 	server.subscribersMu.Lock()
 	for _, topicId := range req.TopicId {
 		server.subscribers[topicId] = append(server.subscribers[topicId], ch)
@@ -287,23 +287,23 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 
 // helper funkcija
 func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb.Message) {
-    event := &pb.MessageEvent{
-        SequenceNumber: server.nextSeqNum,
-        Op:             op,
-        Message:        msg,
-        EventAt:        timestamppb.Now(),
-    }
-    server.nextSeqNum++
-    
-    server.subscribersMu.RLock()
-    for _, ch := range server.subscribers[topicId] {
-        select {
-        case ch <- event:
-        default:
-            // poln kanal
-				}
-    }
-    server.subscribersMu.RUnlock()
+	event := &pb.MessageEvent{
+		SequenceNumber: server.nextSeqNum,
+		Op:             op,
+		Message:        msg,
+		EventAt:        timestamppb.Now(),
+	}
+	server.nextSeqNum++
+
+	server.subscribersMu.RLock()
+	for _, ch := range server.subscribers[topicId] {
+		select {
+		case ch <- event:
+		default:
+			// poln kanal
+		}
+	}
+	server.subscribersMu.RUnlock()
 }
 
 // MESSAGEBOARD SERVER FUNKCIJE

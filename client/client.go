@@ -197,15 +197,14 @@ func delHandler(clientState *ClientState, args []string) {
 	fmt.Printf("Message with id %d deleted\n", messageId)
 }
 
-
 func likeHandler(clientState *ClientState, args []string) {
 	if len(args) == 0 {
 		fmt.Println("Usage: /like <message_id>")
 		return
 	}
-	
+
 	var messageId int64
-	_, err := fmt.Sscan(args[0], &messageId)  
+	_, err := fmt.Sscan(args[0], &messageId)
 	if err != nil {
 		fmt.Println("Invalid message_id (must be a number)")
 		return
@@ -213,7 +212,7 @@ func likeHandler(clientState *ClientState, args []string) {
 
 	req := &pb.LikeMessageRequest{
 		MessageId: messageId,
-		UserId:    clientState.user.Id,  
+		UserId:    clientState.user.Id,
 	}
 
 	msg, err := clientState.rpc.LikeMessage(clientState.ctx, req)
@@ -221,10 +220,9 @@ func likeHandler(clientState *ClientState, args []string) {
 		fmt.Println("Error liking message:", err)
 		return
 	}
-	
+
 	fmt.Printf("Liked message %d (now has %d likes)\n", messageId, msg.Likes)
 }
-
 
 func listTopicsHandler(clientState *ClientState, args []string) {
 	response, err := clientState.rpc.ListTopics(clientState.ctx, &emptypb.Empty{})
@@ -232,7 +230,7 @@ func listTopicsHandler(clientState *ClientState, args []string) {
 		fmt.Println("Error listing topics:", err)
 		return
 	}
-	
+
 	fmt.Println("Topics:")
 	for _, topic := range response.Topics {
 		fmt.Printf("  [%d] %s\n", topic.Id, topic.Name)
@@ -244,38 +242,37 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 		fmt.Println("Usage: /messages <topic_id> [from_id] [limit]")
 		return
 	}
-	
+
 	var topicId int64
 	fmt.Sscan(args[0], &topicId)
-	
+
 	var fromId int64 = 0
 	if len(args) > 1 {
 		fmt.Sscan(args[1], &fromId)
 	}
-	
+
 	var limit int32 = 50
 	if len(args) > 2 {
 		fmt.Sscan(args[2], &limit)
 	}
-	
+
 	req := &pb.GetMessagesRequest{
 		TopicId:       topicId,
 		FromMessageId: fromId,
 		Limit:         limit,
 	}
-	
+
 	response, err := clientState.rpc.GetMessages(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error getting messages:", err)
 		return
 	}
-	
+
 	fmt.Printf("Messages in topic %d:\n", topicId)
 	for _, msg := range response.Messages {
 		fmt.Printf("  [%d] User %d: %s (likes: %d)\n", msg.Id, msg.UserId, msg.Text, msg.Likes)
 	}
 }
-
 
 func getSubscriptionNodeHandler(clientState *ClientState, args []string) {
 	fmt.Println("Ne rabima se zaj")
@@ -286,7 +283,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		fmt.Println("Usage: /subscribe <topic_id> [topic_id2] ...")
 		return
 	}
-	
+
 	var topicIds []int64
 	for _, arg := range args {
 		var id int64
@@ -297,20 +294,20 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		}
 		topicIds = append(topicIds, id)
 	}
-	
+
 	req := &pb.SubscribeTopicRequest{
 		TopicId: topicIds,
 		UserId:  clientState.user.Id,
 	}
-	
+
 	stream, err := clientState.rpc.SubscribeTopic(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error subscribing:", err)
 		return
 	}
-	
+
 	fmt.Println("Subscribed to topics:", topicIds)
-	
+
 	go func() {
 		for {
 			event, err := stream.Recv()
@@ -318,8 +315,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 				fmt.Println("\nSubscription ended:", err)
 				return
 			}
-			
-			
+
 			opName := ""
 			switch event.Op {
 			case pb.OpType_OP_POST:
@@ -331,9 +327,9 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 			case pb.OpType_OP_DELETE:
 				opName = "DELETE"
 			}
-			
-			fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ", 
-				opName, event.Message.TopicId, event.Message.Id, 
+
+			fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
+				opName, event.Message.TopicId, event.Message.Id,
 				event.Message.Text, event.Message.Likes)
 		}
 	}()
