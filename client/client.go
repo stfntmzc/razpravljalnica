@@ -11,6 +11,7 @@ import (
 	"os"
 	pb "razpravljalnica/proto"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -358,6 +359,23 @@ func connectToServer(urlHead string, urlTail string, username string) (*ClientSt
 	// client, uporabnik
 	clientHead := pb.NewMessageBoardClient(connHead)
 	clientTail := pb.NewMessageBoardClient(connTail)
+	// testiramo povezave
+	err = testConnection(clientHead, ctx)
+	if err != nil {
+		connHead.Close()
+		connTail.Close()
+		cancel()
+		return nil, err
+	}
+	fmt.Printf("Succsessfuly connected to head: %s\n", urlHead)
+	err = testConnection(clientTail, ctx)
+	if err != nil {
+		connHead.Close()
+		connTail.Close()
+		cancel()
+		return nil, err
+	}
+	fmt.Printf("Succsessfuly connected to tail: %s\n", urlTail)
 	// registreramo clienta samo na headu
 	user, err := clientHead.CreateUser(ctx, &pb.CreateUserRequest{Name: username})
 	if err != nil {
@@ -376,4 +394,14 @@ func connectToServer(urlHead string, urlTail string, username string) (*ClientSt
 		ctx:      ctx,
 		cancel:   cancel,
 	}, nil
+}
+
+func testConnection(client pb.MessageBoardClient, ctx context.Context) error {
+	pingCtx, pingCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer pingCancel()
+	_, err := client.TestConnection(pingCtx, &emptypb.Empty{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
