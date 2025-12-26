@@ -11,7 +11,6 @@ import (
 	"os"
 	pb "razpravljalnica/proto"
 	"strings"
-	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,28 +19,31 @@ import (
 
 type CommandHandler func(clientState *ClientState, args []string)
 type ClientState struct {
-	conn   *grpc.ClientConn
-	rpc    pb.MessageBoardClient
-	user   *pb.User
-	ctx    context.Context
-	cancel context.CancelFunc
+	connHead *grpc.ClientConn
+	rpcHead  pb.MessageBoardClient
+	connTail *grpc.ClientConn
+	rpcTail  pb.MessageBoardClient
+	user     *pb.User
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // mapa komand
 var commands = map[string]CommandHandler{}
-var wg sync.WaitGroup
 
-func Client(url string, username string) {
+func Client(urlHead string, urlTail string, username string) {
 
 	// inicializacija mape komand
 	initCommandHandlers()
 
 	// povežemo se na strežnik
-	clientState, err := connectToServer(url, username)
+	clientState, err := connectToServer(urlHead, urlTail, username)
 	if err != nil {
 		panic(err)
 	}
-	defer clientState.conn.Close()
+	defer clientState.connHead.Close()
+	defer clientState.connTail.Close()
+	fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
 
 	// main loop
 	scanner := bufio.NewScanner(os.Stdin)
@@ -118,7 +120,7 @@ func writeHandler(clientState *ClientState, args []string) {
 		Text:    text,
 	}
 
-	message, err := clientState.rpc.PostMessage(clientState.ctx, req)
+	message, err := clientState.rpcHead.PostMessage(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error posting message:", err)
 		return
@@ -142,7 +144,7 @@ func newtopicHandler(clientState *ClientState, args []string) {
 		Name:   name,
 		UserId: clientState.user.Id,
 	}
-	topic, err := clientState.rpc.CreateTopic(clientState.ctx, req)
+	topic, err := clientState.rpcHead.CreateTopic(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error creating topic:", err)
 		return
@@ -166,7 +168,7 @@ func editHandler(clientState *ClientState, args []string) {
 		MessageId: messageId,
 		Text:      text,
 	}
-	message, err := clientState.rpc.UpdateMessage(clientState.ctx, req)
+	message, err := clientState.rpcHead.UpdateMessage(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error updating message:", err)
 		return
@@ -189,7 +191,7 @@ func delHandler(clientState *ClientState, args []string) {
 		MessageId: messageId,
 		UserId:    clientState.user.Id,
 	}
-	_, err2 := clientState.rpc.DeleteMessage(clientState.ctx, req)
+	_, err2 := clientState.rpcHead.DeleteMessage(clientState.ctx, req)
 	if err2 != nil {
 		fmt.Println("Error deleting message:", err2)
 		return
@@ -215,7 +217,7 @@ func likeHandler(clientState *ClientState, args []string) {
 		UserId:    clientState.user.Id,
 	}
 
-	msg, err := clientState.rpc.LikeMessage(clientState.ctx, req)
+	msg, err := clientState.rpcHead.LikeMessage(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error liking message:", err)
 		return
@@ -225,7 +227,7 @@ func likeHandler(clientState *ClientState, args []string) {
 }
 
 func listTopicsHandler(clientState *ClientState, args []string) {
-	response, err := clientState.rpc.ListTopics(clientState.ctx, &emptypb.Empty{})
+	response, err := clientState.rpcTail.ListTopics(clientState.ctx, &emptypb.Empty{})
 	if err != nil {
 		fmt.Println("Error listing topics:", err)
 		return
@@ -262,7 +264,7 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 		Limit:         limit,
 	}
 
-	response, err := clientState.rpc.GetMessages(clientState.ctx, req)
+	response, err := clientState.rpcTail.GetMessages(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error getting messages:", err)
 		return
@@ -300,7 +302,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		UserId:  clientState.user.Id,
 	}
 
-	stream, err := clientState.rpc.SubscribeTopic(clientState.ctx, req)
+	stream, err := clientState.rpcHead.SubscribeTopic(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error subscribing:", err)
 		return
@@ -338,26 +340,40 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 // COMMANDS
 // =============================================
 
-func connectToServer(url string, username string) (*ClientState, error) {
-
-	// tle mislm da je treba še narest da se connecta na head in na tail
+func connectToServer(urlHead string, urlTail string, username string) (*ClientState, error) {
 
 	// konteks, funkcija za ugasnt
 	ctx, cancel := context.WithCancel(context.Background())
-	// connection
-	conn, err := grpc.NewClient(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// povezave
+	connHead, err := grpc.NewClient(urlHead, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	connTail, err := grpc.NewClient(urlTail, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	// client, uporabnik
-	client := pb.NewMessageBoardClient(conn)
-	user, err := client.CreateUser(ctx, &pb.CreateUserRequest{Name: username})
+	clientHead := pb.NewMessageBoardClient(connHead)
+	clientTail := pb.NewMessageBoardClient(connTail)
+	// registreramo clienta samo na headu
+	user, err := clientHead.CreateUser(ctx, &pb.CreateUserRequest{Name: username})
 	if err != nil {
-		conn.Close()
+		connHead.Close()
+		connTail.Close()
 		cancel()
 		return nil, err
 	}
 
-	return &ClientState{conn: conn, rpc: client, user: user, ctx: ctx, cancel: cancel}, nil
+	return &ClientState{
+		connHead: connHead,
+		rpcHead:  clientHead,
+		connTail: connTail,
+		rpcTail:  clientTail,
+		user:     user,
+		ctx:      ctx,
+		cancel:   cancel,
+	}, nil
 }

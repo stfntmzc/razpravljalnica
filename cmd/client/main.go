@@ -13,7 +13,8 @@ import (
 func main() {
 	userPtr := flag.String("u", "", "user")
 	serverPtr := flag.String("s", "localhost", "server")
-	portPtr := flag.Int("p", 9876, "port number")
+	portPtrHead := flag.Int("h", 9876, "port number")
+	portPtrTail := flag.Int("t", 9877, "port number")
 	flag.Parse()
 
 	if *userPtr == "" {
@@ -21,6 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	url := fmt.Sprintf("%s:%v", *serverPtr, *portPtr)
-	client.Client(url, *userPtr)
+	urlHead := fmt.Sprintf("%s:%v", *serverPtr, *portPtrHead)
+	urlTail := fmt.Sprintf("%s:%v", *serverPtr, *portPtrTail)
+	client.Client(urlHead, urlTail, *userPtr)
 }
