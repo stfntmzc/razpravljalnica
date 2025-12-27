@@ -80,6 +80,7 @@ func initCommandHandlers() {
 	commands["/messages"] = listMessagesHandler
 	commands["/node"] = getSubscriptionNodeHandler
 	commands["/subscribe"] = subscribtionHandler
+	commands["/unsubscribe"] = unsubscribeHandler
 }
 
 func handleInput(clientState *ClientState, line string) {
@@ -286,7 +287,10 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		fmt.Println("Usage: /subscribe <topic_id> [topic_id2] ...")
 		return
 	}
-
+	if clientState.subCancel != nil {
+		clientState.subCancel()
+	}
+	
 	var topicIds []int64
 	for _, arg := range args {
 		var id int64
@@ -298,6 +302,9 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		topicIds = append(topicIds, id)
 	}
 
+	subCtx, subCancel := context.WithCancel(clientState.ctx)
+	clientState.subCancel = subCancel
+	
 	req := &pb.SubscribeTopicRequest{
 		TopicId: topicIds,
 		UserId:  clientState.user.Id,
@@ -306,6 +313,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 	stream, err := clientState.rpcHead.SubscribeTopic(clientState.ctx, req)
 	if err != nil {
 		fmt.Println("Error subscribing:", err)
+		subCancel()
 		return
 	}
 
@@ -336,6 +344,16 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 				event.Message.Text, event.Message.Likes)
 		}
 	}()
+}
+
+func unsubscribeHandler(clientState *ClientState, args []string) {
+	if clientState.subCancel == nil {
+		fmt.Println("Not subscribed to anything")
+		return
+	}
+	clientState.subCancel()
+	clientState.subCancel = nil
+	fmt.Println("Unsubscribed")
 }
 
 // COMMANDS
