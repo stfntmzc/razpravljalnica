@@ -1245,7 +1245,7 @@ const file_razpravljalnica_proto_rawDesc = "" +
 	"\aOP_POST\x10\x00\x12\v\n" +
 	"\aOP_LIKE\x10\x01\x12\r\n" +
 	"\tOP_DELETE\x10\x02\x12\r\n" +
-	"\tOP_UPDATE\x10\x032\xcd\x06\n" +
+	"\tOP_UPDATE\x10\x032\x8f\a\n" +
 	"\fMessageBoard\x12G\n" +
 	"\n" +
 	"CreateUser\x12\".razpravljalnica.CreateUserRequest\x1a\x15.razpravljalnica.User\x12J\n" +
@@ -1258,7 +1258,8 @@ const file_razpravljalnica_proto_rawDesc = "" +
 	"\n" +
 	"ListTopics\x12\x16.google.protobuf.Empty\x1a#.razpravljalnica.ListTopicsResponse\x12X\n" +
 	"\vGetMessages\x12#.razpravljalnica.GetMessagesRequest\x1a$.razpravljalnica.GetMessagesResponse\x12Y\n" +
-	"\x0eSubscribeTopic\x12&.razpravljalnica.SubscribeTopicRequest\x1a\x1d.razpravljalnica.MessageEvent0\x012c\n" +
+	"\x0eSubscribeTopic\x12&.razpravljalnica.SubscribeTopicRequest\x1a\x1d.razpravljalnica.MessageEvent0\x01\x12@\n" +
+	"\x0eTestConnection\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2c\n" +
 	"\fControlPlane\x12S\n" +
 	"\x0fGetClusterState\x12\x16.google.protobuf.Empty\x1a(.razpravljalnica.GetClusterStateResponseB\x12Z\x10/razpravljalnicab\x06proto3"
 
@@ -1320,20 +1321,22 @@ var file_razpravljalnica_proto_depIdxs = []int32{
 	21, // 16: razpravljalnica.MessageBoard.ListTopics:input_type -> google.protobuf.Empty
 	13, // 17: razpravljalnica.MessageBoard.GetMessages:input_type -> razpravljalnica.GetMessagesRequest
 	15, // 18: razpravljalnica.MessageBoard.SubscribeTopic:input_type -> razpravljalnica.SubscribeTopicRequest
-	21, // 19: razpravljalnica.ControlPlane.GetClusterState:input_type -> google.protobuf.Empty
-	1,  // 20: razpravljalnica.MessageBoard.CreateUser:output_type -> razpravljalnica.User
-	2,  // 21: razpravljalnica.MessageBoard.CreateTopic:output_type -> razpravljalnica.Topic
-	3,  // 22: razpravljalnica.MessageBoard.PostMessage:output_type -> razpravljalnica.Message
-	3,  // 23: razpravljalnica.MessageBoard.UpdateMessage:output_type -> razpravljalnica.Message
-	21, // 24: razpravljalnica.MessageBoard.DeleteMessage:output_type -> google.protobuf.Empty
-	3,  // 25: razpravljalnica.MessageBoard.LikeMessage:output_type -> razpravljalnica.Message
-	17, // 26: razpravljalnica.MessageBoard.GetSubscriptionNode:output_type -> razpravljalnica.SubscriptionNodeResponse
-	12, // 27: razpravljalnica.MessageBoard.ListTopics:output_type -> razpravljalnica.ListTopicsResponse
-	14, // 28: razpravljalnica.MessageBoard.GetMessages:output_type -> razpravljalnica.GetMessagesResponse
-	18, // 29: razpravljalnica.MessageBoard.SubscribeTopic:output_type -> razpravljalnica.MessageEvent
-	19, // 30: razpravljalnica.ControlPlane.GetClusterState:output_type -> razpravljalnica.GetClusterStateResponse
-	20, // [20:31] is the sub-list for method output_type
-	9,  // [9:20] is the sub-list for method input_type
+	21, // 19: razpravljalnica.MessageBoard.TestConnection:input_type -> google.protobuf.Empty
+	21, // 20: razpravljalnica.ControlPlane.GetClusterState:input_type -> google.protobuf.Empty
+	1,  // 21: razpravljalnica.MessageBoard.CreateUser:output_type -> razpravljalnica.User
+	2,  // 22: razpravljalnica.MessageBoard.CreateTopic:output_type -> razpravljalnica.Topic
+	3,  // 23: razpravljalnica.MessageBoard.PostMessage:output_type -> razpravljalnica.Message
+	3,  // 24: razpravljalnica.MessageBoard.UpdateMessage:output_type -> razpravljalnica.Message
+	21, // 25: razpravljalnica.MessageBoard.DeleteMessage:output_type -> google.protobuf.Empty
+	3,  // 26: razpravljalnica.MessageBoard.LikeMessage:output_type -> razpravljalnica.Message
+	17, // 27: razpravljalnica.MessageBoard.GetSubscriptionNode:output_type -> razpravljalnica.SubscriptionNodeResponse
+	12, // 28: razpravljalnica.MessageBoard.ListTopics:output_type -> razpravljalnica.ListTopicsResponse
+	14, // 29: razpravljalnica.MessageBoard.GetMessages:output_type -> razpravljalnica.GetMessagesResponse
+	18, // 30: razpravljalnica.MessageBoard.SubscribeTopic:output_type -> razpravljalnica.MessageEvent
+	21, // 31: razpravljalnica.MessageBoard.TestConnection:output_type -> google.protobuf.Empty
+	19, // 32: razpravljalnica.ControlPlane.GetClusterState:output_type -> razpravljalnica.GetClusterStateResponse
+	21, // [21:33] is the sub-list for method output_type
+	9,  // [9:21] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name

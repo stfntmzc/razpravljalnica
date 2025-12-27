@@ -10,12 +10,14 @@ import (
 	"maps"
 	"net"
 	pb "razpravljalnica/proto"
+	"time"
 
 	"slices"
 	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -23,6 +25,8 @@ import (
 
 // =============================================
 // MESSAGEBOARD SERVER
+
+var wg sync.WaitGroup
 
 type MessageBoardServer struct {
 	pb.UnimplementedMessageBoardServer
@@ -35,9 +39,14 @@ type MessageBoardServer struct {
 	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
 	subscribersMu sync.RWMutex
 	nextSeqNum    int64
+	// replikacija
+	isHead   bool
+	isTail   bool
+	nodeNext *adjacentNode
+	nodePrev *adjacentNode
 }
 
-func NewMessageBoardServer() *MessageBoardServer {
+func newMessageBoardServer(isHead bool, isTail bool) *MessageBoardServer {
 	return &MessageBoardServer{
 		topics:        make(map[int64]*pb.Topic, 0),
 		nextTopicID:   1,
@@ -47,34 +56,133 @@ func NewMessageBoardServer() *MessageBoardServer {
 		nextUserID:    1,
 		subscribers:   make(map[int64][]chan *pb.MessageEvent),
 		nextSeqNum:    1,
+		isHead:        isHead,
+		isTail:        isTail,
+		nodeNext:      nil,
+		nodePrev:      nil,
 	}
+}
+
+type adjacentNode struct {
+	conn   *grpc.ClientConn
+	rpc    pb.MessageBoardClient
+	cancel context.CancelFunc
+}
+
+func getAdjacentNode(url string) (*adjacentNode, error) {
+	fmt.Printf("Connecting to node: %s\n", url)
+	// cancel funkcija za ugasnt
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var rpc pb.MessageBoardClient
+	var conn *grpc.ClientConn
+
+	var err error
+	retry := 5
+	for retry != 0 {
+		// nov "client"
+		conn, err = grpc.NewClient(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		//defer conn.Close()
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		rpc = pb.NewMessageBoardClient(conn)
+		// test povezave
+		_, err = rpc.TestConnection(ctx, &emptypb.Empty{})
+		if err == nil {
+			break
+		}
+		fmt.Printf("Failed to connect to %s, retrying...\n", url)
+		retry--
+		time.Sleep(time.Second * 2)
+	}
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	return &adjacentNode{
+		conn:   conn,
+		rpc:    rpc,
+		cancel: cancel,
+	}, nil
+}
+
+func (server *MessageBoardServer) connectToNode(url string) error {
+	node, err := getAdjacentNode(url)
+	if err != nil {
+		return err
+	}
+	server.nodeNext = node
+	fmt.Printf("Connected to node at %s\n", url)
+	return nil
 }
 
 // MESSAGEBOARD SERVER
 // =============================================
 
-func StartServer(url string) {
+func StartServer(url string, urlNext string, urlPrev string, isHead bool, isTail bool) {
+	if isHead {
+		fmt.Printf("Starting head node on %s ...\n", url)
+	} else if isTail {
+		fmt.Printf("Starting tail node on %s ...\n", url)
+	} else {
+		fmt.Printf("Starting normal node on %s ...\n", url)
+	}
 	// pripravimo grpc strežnik
 	grpcServer := grpc.NewServer()
 
-	// rekistreramo servis (message board)
-	messageBoardServer := NewMessageBoardServer()
+	// registreramo servis (message board)
+	messageBoardServer := newMessageBoardServer(isHead, isTail)
 	pb.RegisterMessageBoardServer(grpcServer, messageBoardServer)
-
 	// odpremo port
 	listener, err := net.Listen("tcp", url)
 	if err != nil {
 		panic(err)
 	}
+
+	// povežemo se na next
+	if !isTail {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err = messageBoardServer.connectToNode(urlNext)
+			if err != nil {
+				panic(err)
+			}
+		}()
+	}
+	// povežemo se na previous
+	if !isHead {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err = messageBoardServer.connectToNode(urlPrev)
+			if err != nil {
+				panic(err)
+			}
+		}()
+	}
+
 	fmt.Printf("gRPC server listening at %v\n", url)
 	// začnemo s streženjem
 	if err := grpcServer.Serve(listener); err != nil {
 		panic(err)
 	}
+
 }
 
 // =============================================
 // MESSAGEBOARD SERVER FUNKCIJE
+
+// TODO
+// v vseh teh funkcijah, kjer se kej piše mora potem poslat spremembe svojemu nasledniku
+// če je server tail, mora potrdit zapis, in poslat potrdilo svojemu predhodniku
+
+func (server *MessageBoardServer) TestConnection(ctx context.Context, req *emptypb.Empty) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
 
 func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	//fmt.Println("CreateTopic not implemented")
