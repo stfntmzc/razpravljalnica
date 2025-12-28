@@ -30,6 +30,7 @@ var wg sync.WaitGroup
 
 type MessageBoardServer struct {
 	pb.UnimplementedMessageBoardServer
+	mu            sync.RWMutex
 	topics        map[int64]*pb.Topic
 	nextTopicID   int64
 	messages      map[int64]*pb.Message
@@ -109,13 +110,21 @@ func getAdjacentNode(url string) (*adjacentNode, error) {
 	}, nil
 }
 
-func (server *MessageBoardServer) connectToNode(url string) error {
+func (server *MessageBoardServer) connectToNode(url string, direction bool) error {
 	node, err := getAdjacentNode(url)
 	if err != nil {
 		return err
 	}
-	server.nodeNext = node
-	fmt.Printf("Connected to node at %s\n", url)
+
+	if direction {
+		server.nodeNext = node
+		fmt.Printf("Connected to next node at %s\n", url)
+	}
+	if !direction {
+		server.nodePrev = node
+		fmt.Printf("Connected to previous node at %s\n", url)
+	}
+
 	return nil
 }
 
@@ -147,7 +156,7 @@ func StartServer(url string, urlNext string, urlPrev string, isHead bool, isTail
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = messageBoardServer.connectToNode(urlNext)
+			err = messageBoardServer.connectToNode(urlNext, true)
 			if err != nil {
 				panic(err)
 			}
@@ -158,7 +167,7 @@ func StartServer(url string, urlNext string, urlPrev string, isHead bool, isTail
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = messageBoardServer.connectToNode(urlPrev)
+			err = messageBoardServer.connectToNode(urlPrev, false)
 			if err != nil {
 				panic(err)
 			}
@@ -185,7 +194,17 @@ func (server *MessageBoardServer) TestConnection(ctx context.Context, req *empty
 }
 
 func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
-	//fmt.Println("CreateTopic not implemented")
+	if server.nodeNext != nil {
+		_, err := server.nodeNext.rpc.CreateTopic(ctx, req)
+		
+		if err != nil {
+			return nil, err 
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
 	topic, exists := server.getTopicByName(req.Name)
 	if exists {
 		fmt.Printf("NEW TOPIC ATTEMPT BY [%d] %s, BUT TOPIC ALREADY EXISTS: Name=%s, Id=%d\n", req.UserId, server.users[req.UserId].Name, topic.Name, topic.Id)
@@ -200,6 +219,7 @@ func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.Creat
 
 // pomozna
 func (server *MessageBoardServer) getTopicByName(name string) (*pb.Topic, bool) {
+
 	for _, topic := range server.topics {
 		if topic.Name == name {
 			return topic, true
@@ -209,6 +229,18 @@ func (server *MessageBoardServer) getTopicByName(name string) (*pb.Topic, bool) 
 }
 
 func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
+
+	if server.nodeNext != nil {
+		_, err := server.nodeNext.rpc.CreateUser(ctx, req)
+		
+		if err != nil {
+			return nil, err 
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
 	user, exists := server.getUserByName(req.Name)
 	if exists {
 		fmt.Printf("USER CONNECTED: Name=%s, Id=%d\n", user.Name, user.Id)
@@ -232,7 +264,16 @@ func (server *MessageBoardServer) getUserByName(name string) (*pb.User, bool) {
 }
 
 func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostMessageRequest) (*pb.Message, error) {
-	// preverimo če user obstaja
+	if server.nodeNext != nil {
+		_, err := server.nodeNext.rpc.PostMessage(ctx, req)
+		if err != nil {
+			return nil, err  
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
 	user, ok := server.users[req.UserId]
 	if !ok {
 		// user not found !!!!!! neki čudnega se dogaja
@@ -267,6 +308,18 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 }
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
+	
+	if server.nodeNext != nil {
+		_, err := server.nodeNext.rpc.UpdateMessage(ctx, req)
+		
+		if err != nil {
+			return nil, err 
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
 	msg := server.messages[req.MessageId]
 	if msg == nil {
 		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
@@ -281,6 +334,18 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 }
 
 func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.DeleteMessageRequest) (*emptypb.Empty, error) {
+
+	if server.nodeNext != nil {
+		_, err := server.nodeNext.rpc.DeleteMessage(ctx, req)
+		
+		if err != nil {
+			return nil, err 
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
 	msg := server.messages[req.MessageId]
 	if msg == nil {
 		fmt.Printf("DELETE MESSAGE ATTEMPT BY [%d] %s, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, server.users[req.UserId].Name, req.MessageId)
@@ -294,6 +359,18 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 }
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
+
+	if server.nodeNext != nil {
+		_, err := server.nodeNext.rpc.LikeMessage(ctx, req)
+		
+		if err != nil {
+			return nil, err 
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
 
 	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
 	topic_id := req.TopicId
@@ -316,6 +393,11 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 
 func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.Empty) (*pb.ListTopicsResponse, error) {
 
+	// smo ze na tailu tak da ne abimo rekurzivno klicat nic
+	// ampak se vedno mormo lockat za branje, zato uporabimo rlock
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+
 	topics_slice := slices.Collect(maps.Values(server.topics))
 
 	response := &pb.ListTopicsResponse{
@@ -328,6 +410,10 @@ func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.E
 }
 
 func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMessagesRequest) (*pb.GetMessagesResponse, error) {
+	// isto tu, smo na tailu 
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+
 	topic_id := req.TopicId
 	from_id := req.FromMessageId
 	limit := req.Limit
@@ -358,6 +444,7 @@ func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *
 }
 
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
+
 	ch := make(chan *pb.MessageEvent, 100)
 
 	server.subscribersMu.Lock()

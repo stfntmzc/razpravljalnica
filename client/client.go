@@ -27,6 +27,7 @@ type ClientState struct {
 	user     *pb.User
 	ctx      context.Context
 	cancel   context.CancelFunc
+	subCancel context.CancelFunc
 }
 
 // mapa komand
@@ -310,7 +311,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		UserId:  clientState.user.Id,
 	}
 
-	stream, err := clientState.rpcHead.SubscribeTopic(clientState.ctx, req)
+	stream, err := clientState.rpcHead.SubscribeTopic(subCtx, req)
 	if err != nil {
 		fmt.Println("Error subscribing:", err)
 		subCancel()
