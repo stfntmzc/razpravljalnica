@@ -20,14 +20,14 @@ import (
 
 type CommandHandler func(clientState *ClientState, args []string)
 type ClientState struct {
-	connHead *grpc.ClientConn
-	rpcHead  pb.MessageBoardClient
-	connTail *grpc.ClientConn
-	rpcTail  pb.MessageBoardClient
-	user     *pb.User
-	ctx      context.Context
-	cancel   context.CancelFunc
-	subCancel context.CancelFunc
+	connHead      *grpc.ClientConn
+	rpcHead       pb.MessageBoardClient
+	connTail      *grpc.ClientConn
+	rpcTail       pb.MessageBoardClient
+	user          *pb.User
+	ctx           context.Context
+	cancel        context.CancelFunc
+	subscriptions map[int64]context.CancelFunc
 }
 
 // mapa komand
@@ -288,10 +288,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		fmt.Println("Usage: /subscribe <topic_id> [topic_id2] ...")
 		return
 	}
-	if clientState.subCancel != nil {
-		clientState.subCancel()
-	}
-	
+
 	var topicIds []int64
 	for _, arg := range args {
 		var id int64
@@ -303,58 +300,94 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		topicIds = append(topicIds, id)
 	}
 
-	subCtx, subCancel := context.WithCancel(clientState.ctx)
-	clientState.subCancel = subCancel
-	
-	req := &pb.SubscribeTopicRequest{
-		TopicId: topicIds,
-		UserId:  clientState.user.Id,
-	}
-
-	stream, err := clientState.rpcHead.SubscribeTopic(subCtx, req)
-	if err != nil {
-		fmt.Println("Error subscribing:", err)
-		subCancel()
-		return
-	}
-
-	fmt.Println("Subscribed to topics:", topicIds)
-
-	go func() {
-		for {
-			event, err := stream.Recv()
-			if err != nil {
-				fmt.Println("\nSubscription ended:", err)
-				return
-			}
-
-			opName := ""
-			switch event.Op {
-			case pb.OpType_OP_POST:
-				opName = "NEW"
-			case pb.OpType_OP_LIKE:
-				opName = "LIKE"
-			case pb.OpType_OP_UPDATE:
-				opName = "EDIT"
-			case pb.OpType_OP_DELETE:
-				opName = "DELETE"
-			}
-
-			fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
-				opName, event.Message.TopicId, event.Message.Id,
-				event.Message.Text, event.Message.Likes)
+	// Za vsak topik naredimo ločeno subscription
+	for _, topicId := range topicIds {
+		// Če je že subscribed, preskočimo
+		if _, exists := clientState.subscriptions[topicId]; exists {
+			fmt.Printf("Already subscribed to topic with id %d\n", topicId)
+			continue
 		}
-	}()
+
+		// Naredimo ločen context za to subscription
+		subCtx, subCancel := context.WithCancel(clientState.ctx)
+		clientState.subscriptions[topicId] = subCancel
+
+		// Zahtevamo subscription samo za ta topik
+		req := &pb.SubscribeTopicRequest{
+			TopicId: []int64{topicId},
+			UserId:  clientState.user.Id,
+		}
+
+		stream, err := clientState.rpcHead.SubscribeTopic(subCtx, req)
+		if err != nil {
+			fmt.Printf("Error subscribing to topic %d: %s\n", topicId, err)
+			subCancel()
+			delete(clientState.subscriptions, topicId)
+			continue
+		}
+
+		fmt.Printf("Subscribed to topic: %d\n", topicId)
+
+		// Go rutina za vsak topik posebej
+		go func(tId int64, s pb.MessageBoard_SubscribeTopicClient) {
+			for {
+				event, err := s.Recv()
+				if err != nil {
+					fmt.Printf("\nSubscription to topic %d ended: ", tId)
+					fmt.Println(err)
+					fmt.Printf("> ")
+					return
+				}
+
+				opName := ""
+				switch event.Op {
+				case pb.OpType_OP_POST:
+					opName = "NEW"
+				case pb.OpType_OP_LIKE:
+					opName = "LIKE"
+				case pb.OpType_OP_UPDATE:
+					opName = "EDIT"
+				case pb.OpType_OP_DELETE:
+					opName = "DELETE"
+				}
+
+				fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
+					opName, event.Message.TopicId, event.Message.Id,
+					event.Message.Text, event.Message.Likes)
+			}
+		}(topicId, stream)
+	}
 }
 
 func unsubscribeHandler(clientState *ClientState, args []string) {
-	if clientState.subCancel == nil {
-		fmt.Println("Not subscribed to anything")
+	if len(args) == 0 {
+		fmt.Println("Usage: /unsubscribe <topic_id> [topic_id2] ...")
 		return
 	}
-	clientState.subCancel()
-	clientState.subCancel = nil
-	fmt.Println("Unsubscribed")
+
+	var unsubscribedCount int
+	for _, arg := range args {
+		var topicId int64
+		_, err := fmt.Sscan(arg, &topicId)
+		if err != nil {
+			fmt.Println("Invalid topic_id:", arg)
+			continue
+		}
+
+		cancel, exists := clientState.subscriptions[topicId]
+		if exists {
+			cancel()
+			delete(clientState.subscriptions, topicId)
+			fmt.Printf("Unsubscribed from topic %d\n", topicId)
+			unsubscribedCount++
+		} else {
+			fmt.Printf("Not subscribed to topic %d\n", topicId)
+		}
+	}
+
+	if unsubscribedCount == 0 {
+		fmt.Println("Not subscribed to any of the specified topics")
+	}
 }
 
 // COMMANDS
@@ -405,13 +438,14 @@ func connectToServer(urlHead string, urlTail string, username string) (*ClientSt
 	}
 
 	return &ClientState{
-		connHead: connHead,
-		rpcHead:  clientHead,
-		connTail: connTail,
-		rpcTail:  clientTail,
-		user:     user,
-		ctx:      ctx,
-		cancel:   cancel,
+		connHead:      connHead,
+		rpcHead:       clientHead,
+		connTail:      connTail,
+		rpcTail:       clientTail,
+		user:          user,
+		ctx:           ctx,
+		cancel:        cancel,
+		subscriptions: make(map[int64]context.CancelFunc),
 	}, nil
 }
 
