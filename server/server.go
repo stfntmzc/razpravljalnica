@@ -208,10 +208,6 @@ func StartServer(url string, id int64, urlNext string, urlPrev string, isHead bo
 // =============================================
 // MESSAGEBOARD SERVER FUNKCIJE
 
-// TODO
-// v vseh teh funkcijah, kjer se kej piše mora potem poslat spremembe svojemu nasledniku
-// če je server tail, mora potrdit zapis, in poslat potrdilo svojemu predhodniku
-
 func (server *MessageBoardServer) TestConnection(ctx context.Context, req *emptypb.Empty) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
@@ -460,7 +456,7 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 }
 
 // subscribe stvari
-
+// TODO : da je to avtomatsko
 // zaenkrat
 var nodeAdresses = map[string]string{
 	// nodeID -> address
