@@ -90,7 +90,12 @@ service  MessageBoard{
   rpc SubscribeTopic(SubscribeTopicRequest) returns (stream MessageEvent);
 
   // DODANO
+  // za testiranje povezave
   rpc TestConnection(google.protobuf.Empty) returns (google.protobuf.Empty);
+  // za preverjanje tokena
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+  // za brisanje subscriptiona na headu
+  rpc ExpireSubscription(ExpireSubscriptionRequest) returns (google.protobuf.Empty);
 }
 
 message CreateUserRequest {
@@ -163,6 +168,22 @@ message MessageEvent {
   OpType op = 2; // type of event
   Message message = 3;
   google.protobuf.Timestamp event_at = 4; // timestamp of the event
+}
+
+// DODANO
+message VerifyTokenRequest {
+  string token = 1;
+  int64 user_id = 2;
+}
+
+message VerifyTokenResponse {
+  bool valid = 1;
+}
+
+message ExpireSubscriptionRequest {
+  string token = 1;
+  int64 user_id = 2;
+  string node_id = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

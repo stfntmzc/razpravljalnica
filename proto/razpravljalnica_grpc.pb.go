@@ -33,6 +33,8 @@ const (
 	MessageBoard_GetMessages_FullMethodName         = "/razpravljalnica.MessageBoard/GetMessages"
 	MessageBoard_SubscribeTopic_FullMethodName      = "/razpravljalnica.MessageBoard/SubscribeTopic"
 	MessageBoard_TestConnection_FullMethodName      = "/razpravljalnica.MessageBoard/TestConnection"
+	MessageBoard_VerifyToken_FullMethodName         = "/razpravljalnica.MessageBoard/VerifyToken"
+	MessageBoard_ExpireSubscription_FullMethodName  = "/razpravljalnica.MessageBoard/ExpireSubscription"
 )
 
 // MessageBoardClient is the client API for MessageBoard service.
@@ -60,7 +62,12 @@ type MessageBoardClient interface {
 	// Subscribe to topics; goes to the node returned by head
 	SubscribeTopic(ctx context.Context, in *SubscribeTopicRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MessageEvent], error)
 	// DODANO
+	// za testiranje povezave
 	TestConnection(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// za preverjanje tokena
+	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
+	// za brisanje subscriptiona na headu
+	ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type messageBoardClient struct {
@@ -190,6 +197,26 @@ func (c *messageBoardClient) TestConnection(ctx context.Context, in *emptypb.Emp
 	return out, nil
 }
 
+func (c *messageBoardClient) VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyTokenResponse)
+	err := c.cc.Invoke(ctx, MessageBoard_VerifyToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageBoardClient) ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, MessageBoard_ExpireSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageBoardServer is the server API for MessageBoard service.
 // All implementations must embed UnimplementedMessageBoardServer
 // for forward compatibility.
@@ -215,7 +242,12 @@ type MessageBoardServer interface {
 	// Subscribe to topics; goes to the node returned by head
 	SubscribeTopic(*SubscribeTopicRequest, grpc.ServerStreamingServer[MessageEvent]) error
 	// DODANO
+	// za testiranje povezave
 	TestConnection(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	// za preverjanje tokena
+	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
+	// za brisanje subscriptiona na headu
+	ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedMessageBoardServer()
 }
 
@@ -258,6 +290,12 @@ func (UnimplementedMessageBoardServer) SubscribeTopic(*SubscribeTopicRequest, gr
 }
 func (UnimplementedMessageBoardServer) TestConnection(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method TestConnection not implemented")
+}
+func (UnimplementedMessageBoardServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method VerifyToken not implemented")
+}
+func (UnimplementedMessageBoardServer) ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExpireSubscription not implemented")
 }
 func (UnimplementedMessageBoardServer) mustEmbedUnimplementedMessageBoardServer() {}
 func (UnimplementedMessageBoardServer) testEmbeddedByValue()                      {}
@@ -471,6 +509,42 @@ func _MessageBoard_TestConnection_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessageBoard_VerifyToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageBoardServer).VerifyToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageBoard_VerifyToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageBoardServer).VerifyToken(ctx, req.(*VerifyTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessageBoard_ExpireSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExpireSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageBoardServer).ExpireSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageBoard_ExpireSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageBoardServer).ExpireSubscription(ctx, req.(*ExpireSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessageBoard_ServiceDesc is the grpc.ServiceDesc for MessageBoard service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -517,6 +591,14 @@ var MessageBoard_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TestConnection",
 			Handler:    _MessageBoard_TestConnection_Handler,
+		},
+		{
+			MethodName: "VerifyToken",
+			Handler:    _MessageBoard_VerifyToken_Handler,
+		},
+		{
+			MethodName: "ExpireSubscription",
+			Handler:    _MessageBoard_ExpireSubscription_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

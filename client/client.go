@@ -27,7 +27,13 @@ type ClientState struct {
 	user          *pb.User
 	ctx           context.Context
 	cancel        context.CancelFunc
-	subscriptions map[int64]context.CancelFunc
+	subscriptions map[int64]Subscription // topic id -> subscription
+}
+type Subscription struct {
+	connSub   *grpc.ClientConn
+	rpcSub    pb.MessageBoardClient
+	cancelSub context.CancelFunc
+	token     string
 }
 
 // mapa komand
@@ -66,7 +72,6 @@ func Client(urlHead string, urlTail string, username string) {
 			//fmt.Println("ukaz:", line)
 			handleInput(clientState, line)
 		}
-
 	}
 }
 
@@ -309,26 +314,72 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		}
 
 		// Naredimo ločen context za to subscription
-		subCtx, subCancel := context.WithCancel(clientState.ctx)
-		clientState.subscriptions[topicId] = subCancel
+		subCtx, cancel := context.WithCancel(clientState.ctx)
 
-		// Zahtevamo subscription samo za ta topik
-		req := &pb.SubscribeTopicRequest{
-			TopicId: []int64{topicId},
+		// tukej dobimo subscribe node
+		nodeReq := &pb.SubscriptionNodeRequest{
 			UserId:  clientState.user.Id,
+			TopicId: []int64{topicId},
+		}
+		// dobimo subscription node
+		subNodeResponce, err := clientState.rpcHead.GetSubscriptionNode(subCtx, nodeReq)
+		if err != nil {
+			fmt.Printf("Getting subscription node %s unsucsessful: %s", subNodeResponce.Node.Address, err)
+			fmt.Println()
+			continue
+		}
+		// za vsak slučaj, če kaj faila, da pošljemo expire request
+		expireSubReq := &pb.ExpireSubscriptionRequest{
+			Token:  subNodeResponce.SubscribeToken,
+			UserId: clientState.user.Id,
+			NodeId: subNodeResponce.Node.NodeId,
+		}
+		// povežemo se na subscribe node
+		conn, err := grpc.NewClient(subNodeResponce.Node.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Printf("Connection to node %s unsucsessful: %s\n", subNodeResponce.Node.Address, err)
+			// iz heada zbrišemo token
+			clientState.rpcHead.ExpireSubscription(subCtx, expireSubReq)
+			continue
+		}
+		rpc := pb.NewMessageBoardClient(conn)
+		err = testConnection(rpc, subCtx)
+		if err != nil {
+			conn.Close()
+			conn.Close()
+			fmt.Printf("Connection to node %s unsucsessful: %s\n", subNodeResponce.Node.Address, err)
+			// iz heada zbrišemo token
+			clientState.rpcHead.ExpireSubscription(subCtx, expireSubReq)
+			continue
+		}
+		fmt.Printf("Succsessfuly connected to node %s for subscription to topic %d\n", subNodeResponce.Node.Address, topicId)
+
+		// "registreramo" subscription na clientu
+		clientState.subscriptions[topicId] = Subscription{
+			connSub:   conn,
+			rpcSub:    rpc,
+			cancelSub: cancel,
+			token:     subNodeResponce.SubscribeToken,
 		}
 
-		stream, err := clientState.rpcHead.SubscribeTopic(subCtx, req)
+		// zahtevamo subscription za topic
+		topicReq := &pb.SubscribeTopicRequest{
+			TopicId:        []int64{topicId},
+			UserId:         clientState.user.Id,
+			SubscribeToken: subNodeResponce.SubscribeToken,
+		}
+
+		stream, err := clientState.subscriptions[topicId].rpcSub.SubscribeTopic(subCtx, topicReq)
 		if err != nil {
 			fmt.Printf("Error subscribing to topic %d: %s\n", topicId, err)
-			subCancel()
+			clientState.subscriptions[topicId].cancelSub()
 			delete(clientState.subscriptions, topicId)
 			continue
 		}
 
 		fmt.Printf("Subscribed to topic: %d\n", topicId)
 
-		// Go rutina za vsak topik posebej
+		// go rutina za vsak topic posebej
 		go func(tId int64, s pb.MessageBoard_SubscribeTopicClient) {
 			for {
 				event, err := s.Recv()
@@ -374,9 +425,18 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 			continue
 		}
 
-		cancel, exists := clientState.subscriptions[topicId]
+		subscription, exists := clientState.subscriptions[topicId]
 		if exists {
-			cancel()
+			req := &pb.ExpireSubscriptionRequest{
+				Token:  clientState.subscriptions[topicId].token,
+				UserId: clientState.user.Id,
+			}
+			_, err := clientState.rpcHead.ExpireSubscription(clientState.ctx, req)
+			if err != nil {
+				fmt.Printf("Error unsubscribing from topic %d: %s\n", topicId, err)
+				continue
+			}
+			subscription.cancelSub()
 			delete(clientState.subscriptions, topicId)
 			fmt.Printf("Unsubscribed from topic %d\n", topicId)
 			unsubscribedCount++
@@ -445,7 +505,7 @@ func connectToServer(urlHead string, urlTail string, username string) (*ClientSt
 		user:          user,
 		ctx:           ctx,
 		cancel:        cancel,
-		subscriptions: make(map[int64]context.CancelFunc),
+		subscriptions: make(map[int64]Subscription),
 	}, nil
 }
 
