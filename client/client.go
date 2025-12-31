@@ -5,10 +5,8 @@
 package client
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 	pb "razpravljalnica/proto"
 	"strings"
 	"time"
@@ -39,22 +37,24 @@ type Subscription struct {
 // mapa komand
 var commands = map[string]CommandHandler{}
 
-func Client(urlHead string, urlTail string, username string) {
+func Client(username string, urlHead string, urlTail string) (*ClientState, error) {
 
 	// inicializacija mape komand
 	initCommandHandlers()
 
 	// povežemo se na strežnik
-	clientState, err := connectToServer(urlHead, urlTail, username)
+	clientState, err := connectToServer(username, urlHead, urlTail)
 	if err != nil {
 		panic(err)
 	}
-	defer clientState.connHead.Close()
-	defer clientState.connTail.Close()
+	//defer clientState.connHead.Close()
+	//defer clientState.connTail.Close()
 	fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
 
+	return clientState, nil
+
 	// main loop
-	scanner := bufio.NewScanner(os.Stdin)
+	/*scanner := bufio.NewScanner(os.Stdin)
 	for {
 		select {
 		case <-clientState.ctx.Done():
@@ -72,7 +72,7 @@ func Client(urlHead string, urlTail string, username string) {
 			//fmt.Println("ukaz:", line)
 			handleInput(clientState, line)
 		}
-	}
+	}*/
 }
 
 func initCommandHandlers() {
@@ -453,7 +453,7 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 // COMMANDS
 // =============================================
 
-func connectToServer(urlHead string, urlTail string, username string) (*ClientState, error) {
+func connectToServer(username string, urlHead string, urlTail string) (*ClientState, error) {
 
 	// konteks, funkcija za ugasnt
 	ctx, cancel := context.WithCancel(context.Background())

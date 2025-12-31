@@ -1,7 +1,7 @@
 // zagonska točka za odjemalca Razpravljalnice
 // zažene se z: go run cmd/client/main.go
 
-package main
+/*package main
 
 import (
 	"flag"
@@ -25,4 +25,11 @@ func main() {
 	urlHead := fmt.Sprintf("%s:%v", *serverPtr, *portPtrHead)
 	urlTail := fmt.Sprintf("%s:%v", *serverPtr, *portPtrTail)
 	client.Client(urlHead, urlTail, *userPtr)
+}
+*/
+
+package main
+
+func main() {
+	RunUI()
 }
