@@ -72,8 +72,11 @@ type model struct {
 	createTopicInput textinput.Model
 	topics           map[int64]string
 	// messages
-	openTopicId int64
-	messages    map[int64]client.UiMessageItem
+	openTopicId         int64
+	messages            map[int64]client.UiMessageItem
+	cursorMessagesIndex int
+	messagesStartIndex  int
+	messagesEndIndex    int
 
 	// client
 	client connectResultMsg
@@ -247,6 +250,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.createTopicInput, cmd = m.createTopicInput.Update(msg)
 				return m, cmd
 			} else if m.openTopicId != -1 {
+				// beremo sporočil nekega topica
 				switch msg.String() {
 				case "b":
 					m.openTopicId = -1
@@ -257,6 +261,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "left":
 					if m.openTabIndex > 0 {
 						m.openTabIndex--
+					}
+				case "up":
+					if m.cursorMessagesIndex > 0 {
+						m.cursorMessagesIndex--
+						// prišli smo do roba
+						if m.cursorMessagesIndex < m.messagesStartIndex {
+							m.messagesStartIndex--
+							m.messagesEndIndex--
+						}
+					}
+				case "down":
+					contentLen := getLastMessageCursorIndex(m) + 1
+
+					if m.cursorMessagesIndex < contentLen-1 {
+						m.cursorMessagesIndex++
+
+						if m.cursorMessagesIndex > m.messagesEndIndex {
+							m.messagesStartIndex++
+							m.messagesEndIndex++
+						}
+
+						if m.messagesEndIndex >= contentLen {
+							m.messagesEndIndex = contentLen - 1
+							viewportHeight := contentHeight - 2*contnetPadddingTopBottom - 2
+							m.messagesStartIndex = max(0, m.messagesEndIndex-viewportHeight)
+						}
 					}
 				}
 			} else {
@@ -321,7 +351,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case "m":
 					if m.tabs[m.openTabIndex] == "Topics" {
-
 						ids := make([]int64, 0, len(m.topics))
 						for id := range m.topics {
 							ids = append(ids, id)
@@ -382,6 +411,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.messages = msg.messages
+			m.cursorMessagesIndex = getLastMessageCursorIndex(m)
+			// da vemo od kje do kje pokazati messages
+			viewport := contentHeight - 2*contnetPadddingTopBottom - 2
+			m.messagesEndIndex = m.cursorMessagesIndex
+			m.messagesStartIndex = max(0, m.messagesEndIndex-viewport)
+
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -657,41 +692,123 @@ func getMessageItemsString(m model, currLineIndex int) string {
 		return messages[i].Timestamp.AsTime().Before(messages[j].Timestamp.AsTime())
 	})
 
-	for _, message := range messages {
-		// avtor, likes
-		nameString := fmt.Sprintf("%s [%d]", message.Username, message.Id)
-		likesString := fmt.Sprintf("%d likes", message.Likes)
-		nameAndLikesString := nameString + getFillWithString(m, messageItemWidth-(len(nameString)+len(likesString)), " ") + likesString
-		filler := getFillWithString(m, contentWidth-(messageItemWidth+2*contnetPadddingSides), " ")
+	content, messageIds, printLegend := buildContentMessages(m, messages)
 
-		s += gatMarginLeftString(m) + verticalLineChar + getContnetPaddingSidesString(m) + nameAndLikesString + filler + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
+	//if m.cursorMessagesIndex == iEnd - contentHeight - 2*contnetPadddingTopBottom + 7
+	iStart := m.messagesStartIndex
+	iEnd := min(m.messagesEndIndex, len(content)-1)
 
-		// vsebina sporočila
-		for _, line := range message.Text {
+	printLegendCounter := 0
+	for i := iStart; i <= iEnd; i++ {
 
-			filler := getFillWithString(
-				m,
-				contentWidth-(messageItemWidth+2*contnetPadddingSides),
-				" ",
-			)
-
-			s += gatMarginLeftString(m) +
-				verticalLineChar +
-				getContnetPaddingSidesString(m) +
-				line +
-				filler +
-				getContnetPaddingSidesString(m) +
-				verticalLineChar + "\n"
+		// štejemo, da napišemo legendo v pravem line-u
+		if messageIds[m.cursorMessagesIndex] == messageIds[i] {
+			printLegendCounter++
 		}
 
-		// spodnji margin
-		for i := 0; i < messageItemMarginBottom; i++ {
-			s += gatMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+		line := gatMarginLeftString(m) + verticalLineChar
+		if m.cursorMessagesIndex == i {
+			line += " > "
+		} else {
+			line += getContnetPaddingSidesString(m)
 		}
+		line += content[i]
+		if printLegend[i] && messageIds[m.cursorMessagesIndex] == messageIds[i] {
+			//printLegend = false
+			legendString := "l - like"
+			line += getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+messageItemWidth+2*contnetPadddingSides), " ")
+			line += legendString
+		} else {
+			filler := getFillWithString(m, contentWidth-(runewidth.StringWidth(content[i])+2*contnetPadddingSides), " ")
+			line += filler
+		}
+		line += getContnetPaddingSidesString(m) + verticalLineChar
+		line += fmt.Sprintf("%d %d %d", messageIds[i], messageIds[m.cursorMessagesIndex], m.cursorMessagesIndex)
+		s += line + "\n"
+		/*if prevMessageId != messageIds[i] {
+			printLegend = true
+		}
+		prevMessageId = messageIds[i]*/
 	}
 
 	return s
 }
+
+// pomozna
+// key: message ID; value: vrstica, kjer se text tega sporočila začne
+func buildContentMessages(m model, messages []client.UiMessageItem) ([]string, map[int]int, map[int]bool) {
+	var content []string
+	ids := make(map[int]int)
+	legend := make(map[int]bool)
+
+	index := 0
+	for i, message := range messages {
+		// ime in likes
+		nameString := fmt.Sprintf("%s [%d]", message.Username, message.Id)
+		likesString := fmt.Sprintf("%d likes", message.Likes)
+		//nameAndLikesString := nameString + getFillWithString(m, messageItemWidth-(len(nameString)+len(likesString)), " ") + likesString
+		nameAndLikesString := nameString + getFillWithString(m, messageItemWidth-(runewidth.StringWidth(nameString)+runewidth.StringWidth(likesString)), " ") + likesString
+
+		ids[index] = int(message.Id)
+		legend[index] = false
+		content = append(content, nameAndLikesString)
+		index++
+		// besedilo
+		for j, line := range message.Text {
+			if j == 0 {
+				legend[index] = true
+			} else {
+				legend[index] = false
+			}
+			ids[index] = int(message.Id)
+			content = append(content, line)
+			index++
+		}
+		// margin, razen na čisto zadnjem
+		if i != len(messages)-1 {
+			for j := 0; j < messageItemMarginBottom; j++ {
+				line := getFillWithString(m, contentWidth-2*contnetPadddingSides, " ")
+				content = append(content, line)
+				ids[index] = int(message.Id)
+				legend[index] = false
+				index++
+			}
+		}
+
+	}
+
+	return content, ids, legend
+}
+
+// pomozna
+/*func getIstart(messages []client.UiMessageItem) int {
+	rez := len(messages) - 1
+
+	currHeight := 0
+	maxHeight := contentHeight - 2*contnetPadddingTopBottom
+	for i := len(messages) - 1; i >= 0; i-- {
+		// margin
+		if currHeight < maxHeight {
+			currHeight += messageItemMarginBottom
+		} else {
+			break
+		}
+		// ime userja
+		if currHeight < maxHeight {
+			currHeight++
+		} else {
+			break
+		}
+		// lines
+		for j := len(messages[i].Text) - 1; j >= 0; j-- {
+			if currHeight < maxHeight {
+				currHeight++
+			} else {
+				break
+			}
+		}
+	}
+}*/
 
 func connectCmd(username string, head string, tail string) tea.Cmd {
 	return func() tea.Msg {
@@ -803,6 +920,36 @@ func wrapText(text string, width int) []string {
 	}
 
 	return lines
+}
+
+func getLastMessageCursorIndex(m model) int {
+	if len(m.messages) == 0 {
+		return 0
+	}
+
+	// messages -> slice
+	messages := make([]client.UiMessageItem, 0, len(m.messages))
+	for _, msg := range m.messages {
+		messages = append(messages, msg)
+	}
+
+	// sortiramo po timestamp
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Timestamp.AsTime().Before(messages[j].Timestamp.AsTime())
+	})
+
+	content, messageIds, _ := buildContentMessages(m, messages)
+
+	// zadnji index, ki pripada zadnjem message-u
+	lastMsgId := int(messages[len(messages)-1].Id)
+
+	for i := len(content) - 1; i >= 0; i-- {
+		if messageIds[i] == lastMsgId {
+			return i
+		}
+	}
+
+	return len(content) - 1
 }
 
 func RunUI() {
