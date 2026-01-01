@@ -1,34 +1,42 @@
 
-  ╭────────╮╭───────────────╮  
-  │ Topics ││ Live chat (0) │
-  │        ╰┴───────────────┴──────────────────────────────────────────────────────────╮  
-  │                                                                                    │
-  │   topic 1 [id]                                                                     │
-  │   topic 2 [id]                                                                     │
-  │  > topic 3 [id]                                r - read messages │ s - subscribe   │
-  │   topic 4 [id]                                                                     │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  │                                                                                    │
-  ├────────────────────────────────────────────────────────────────────────────────────┤
-  │ c - create new topic                                                               │
-  ╰────────────────────────────────────────────────────────────────────────────────────╯
+
+  ╭────────╮╭───────────╮
+  │ Topics ││ Live chat │
+  │        ╰┴───────────┴──────────────────────────────────────────────────────────────────────────────╮
+  │                                                                                                    │
+  │   topic 1 [1]                                                                                      │
+  │   topic 2 [2]                                                                                      │
+  │   topic 3 [3]                                                                                      │
+  │   t2 [4]                                                                                           │
+  │   t3 [5]                                                                                           │
+  │   t4 [6]                                                                                           │
+  │   t5 [7]                                                                                           │
+  │   t7 [8]                                                                                           │
+  │   t8 [9]                                                                                           │
+  │ >  t9 [10]                                                          m - messages │ s - subscribe   │
+  │   t10 dwadadwad [11]                                                                               │
+  │   topic 11 lalaalalal [12]                                                                         │
+  │   dadadadadadadadadaddadadaddsadka [13]                                                            │
+  │   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa [14]                                        │
+  │   nov topic iz tui-ja [15]                                                                         │
+  │   nov chatroom ivana blalaldwkada [16]                                                             │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ c - create new topic │ q - quit                                                                    │
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
 
 
 
@@ -36,9 +44,21 @@
   │ Topics ││ Live chat │
   │        ╰┴───────────┴──────────────────────────────────────────────────────────────────────────────╮
   │                                                                                                    │
-  │   topic1 [1]                                                                                       │
-  │   topic2 [2]                                                                                       │
-  │   t3 [3]                                                                                           │
+  │   user 1:                                                                                          │
+  │   Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at                         │
+  │   molestie mauris, in pulvinar velit.                                                              │
+  │                                                                                                    │
+  │   user 1:                                                                                          │
+  │ > Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at              l - like   │
+  │   molestie mauris, in pulvinar velit.                                                              │
+  │                                                                                                    │
+  │   user 1:                                                                                          │
+  │   Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at                         │
+  │   molestie mauris, in pulvinar velit.                                                              │
+  │                                                                                                    │
+  │   user 1:                                                                                          │
+  │ > Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at   e -edit │ d -delete   │
+  │   molestie mauris, in pulvinar velit.                                                              │
   │                                                                                                    │
   │                                                                                                    │
   │                                                                                                    │
@@ -53,18 +73,9 @@
   │                                                                                                    │
   │                                                                                                    │
   │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
+  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ w - write message │ q - quit                                                                       │
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 
 

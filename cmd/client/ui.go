@@ -22,7 +22,7 @@ const (
 	contnetPadddingSides     = 3
 	contnetPadddingTopBottom = 1
 
-	maxTopicNameLength = 53
+	maxTopicNameLength = 59
 
 	tabsPadding = 1
 
@@ -39,6 +39,8 @@ const (
 	TdownChar          = "┬"
 	TupChar            = "┴"
 	crossChar          = "┼"
+
+	messagesItemWidth = 72
 
 	cursorChar = ">"
 )
@@ -59,14 +61,21 @@ type model struct {
 	contentStartIndexes map[int]int // key je index od taba
 	contentEndIndexes   map[int]int // key je index od taba
 
-	// za ustvaranje topica
+	// topics
 	createTopicMode  bool
 	createTopicInput textinput.Model
+	topics           map[int64]string
+	// messages
+	openTopicId int
+	messages    map[int64]messageItem
 
 	// client
 	client connectResultMsg
+}
 
-	topics map[int64]string
+type messageItem struct {
+	username string
+	text     string
 }
 
 type connectResultMsg struct {
@@ -80,6 +89,7 @@ type listTopicsMsg struct {
 }
 
 type createTopicMsg struct {
+	id  int64
 	err error
 }
 
@@ -280,10 +290,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case listTopicsMsg:
 			if msg.err != nil {
-				// lahko shranmo error, zaenkrat tkole
 				return m, nil
 			}
+
+			oldLen := len(m.topics)
+			newLen := len(msg.topics)
+			viewport := contentHeight - 2*contnetPadddingTopBottom - 1
+
 			m.topics = msg.topics
+
+			// če je vsebine manj kot viewport
+			if newLen <= viewport {
+				m.contentStartIndexes[0] = 0
+				m.contentEndIndexes[0] = newLen - 1
+				m.cursorIndexes[0] = min(m.cursorIndexes[0], newLen-1)
+				return m, nil
+			}
+
+			// če smo bili na dnu, ostanemo na dnu
+			if m.contentEndIndexes[0] == oldLen-1 {
+				m.contentEndIndexes[0] = newLen - 1
+				m.contentStartIndexes[0] = newLen - viewport
+				m.cursorIndexes[0] = newLen - 1
+			} else {
+				// sicer samo razširimo konec
+				m.contentEndIndexes[0] = min(
+					m.contentStartIndexes[0]+viewport,
+					newLen-1,
+				)
+			}
+
 			return m, nil
 		case createTopicMsg:
 			// naredu se je nov topic
@@ -492,7 +528,7 @@ func getTopicsString(m model) string {
 				s += " " + cursorChar + "  "
 				name := m.topics[ids[i]]
 				s += fmt.Sprintf("%s [%d]", name, ids[i])
-				legendString := "r - read messages " + verticalLineChar + " s - subscribe"
+				legendString := "m - messages " + verticalLineChar + " s - subscribe"
 				s += getFillWithString(m, contentWidth-(4+len(name)+digits(ids[i])+3+len(legendString)+contnetPadddingSides-2), " ")
 				s += legendString + getFillWithString(m, contnetPadddingSides, " ")
 				//contentIndex = len(name) + digits(ids[i]) + 3 + 4
