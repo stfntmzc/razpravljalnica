@@ -44,6 +44,8 @@
   │ Topics ││ Live chat │
   │        ╰┴───────────┴──────────────────────────────────────────────────────────────────────────────╮
   │                                                                                                    │
+  │   topic x [9]                                                           s - subscribe │ b - back   │
+  │                                                                                                    │
   │   user 1:                                                                                          │
   │   Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at                         │
   │   molestie mauris, in pulvinar velit.                                                              │
@@ -59,9 +61,6 @@
   │   user 1:                                                                                          │
   │ > Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at   e -edit │ d -delete   │
   │   molestie mauris, in pulvinar velit.                                                              │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
   │                                                                                                    │
   │                                                                                                    │
   │                                                                                                    │

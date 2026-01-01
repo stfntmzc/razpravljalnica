@@ -40,7 +40,9 @@ const (
 	TupChar            = "┴"
 	crossChar          = "┼"
 
-	messagesItemWidth = 72
+	// message item stvari
+	messageItemWidth        = 72
+	messageItemMarginBottom = 1
 
 	cursorChar = ">"
 )
@@ -66,7 +68,7 @@ type model struct {
 	createTopicInput textinput.Model
 	topics           map[int64]string
 	// messages
-	openTopicId int
+	openTopicId int64
 	messages    map[int64]messageItem
 
 	// client
@@ -75,7 +77,7 @@ type model struct {
 
 type messageItem struct {
 	username string
-	text     string
+	text     []string // array stringov širine messageItemWidth
 }
 
 type connectResultMsg struct {
@@ -129,6 +131,10 @@ func initialModel() model {
 		contentEndIndexes[i] = 0
 	}
 
+	// odprt topic
+	openTopicId := -1
+	messages := make(map[int64]messageItem)
+
 	return model{
 		inputs:              inputs,
 		tabs:                tabs,
@@ -139,6 +145,8 @@ func initialModel() model {
 		contentEndIndexes:   contentEndIndexes,
 		createTopicInput:    createTopicInput,
 		createTopicMode:     false,
+		openTopicId:         int64(openTopicId),
+		messages:            messages,
 	}
 }
 
@@ -226,6 +234,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var cmd tea.Cmd
 				m.createTopicInput, cmd = m.createTopicInput.Update(msg)
 				return m, cmd
+			} else if m.openTopicId != -1 {
+				switch msg.String() {
+				case "b":
+					m.openTopicId = -1
+				case "right":
+					if m.openTabIndex < len(m.tabs)-1 {
+						m.openTabIndex++
+					}
+				case "left":
+					if m.openTabIndex > 0 {
+						m.openTabIndex--
+					}
+				}
 			} else {
 				switch msg.String() {
 				case "ctrl+c", "q":
@@ -285,6 +306,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					} else if m.tabs[m.openTabIndex] == "Live chat" {
 						// TODO
+					}
+				case "m":
+					if m.tabs[m.openTabIndex] == "Topics" {
+
+						ids := make([]int64, 0, len(m.topics))
+						for id := range m.topics {
+							ids = append(ids, id)
+						}
+						sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+						topicId := m.cursorIndexes[0]
+						m.openTopicId = int64(ids[topicId])
 					}
 				}
 			}
@@ -360,9 +393,10 @@ func homeView(m model) string {
 	for i := 0; i < marginTop; i++ {
 		s += "\n"
 	}
-	for i := 0; i < marginLeft; i++ {
+	/*for i := 0; i < marginLeft; i++ {
 		s += " "
-	}
+	}*/
+	s += getFillWithString(m, marginLeft, " ")
 
 	// zgornji rob in tabs
 	s += getTabsString(m) + "\n"
@@ -494,7 +528,11 @@ func getContentString(m model) string {
 
 	// topics -----------------------------
 	if m.tabs[m.openTabIndex] == "Topics" {
-		s += getTopicsString(m)
+		if m.openTopicId != -1 {
+			s += getOpenTopicString(m)
+		} else {
+			s += getTopicsString(m)
+		}
 	}
 
 	return s
@@ -558,6 +596,19 @@ func getTopicsString(m model) string {
 		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-2), " ") + verticalLineChar + "\n"
 	}
 	s += gatMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
+
+	return s
+}
+
+func getOpenTopicString(m model) string {
+	s := ""
+
+	// ime topica
+	legendString := "s - subscribe " + verticalLineChar + " b - back"
+	s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getContnetPaddingSidesString(m)
+	s += m.topics[m.openTopicId] + fmt.Sprintf(" [%d]", m.openTopicId)
+	s += getFillWithString(m, contentWidth-(len(m.topics[m.openTopicId])+digits(m.openTopicId)+3+len(legendString)+2*contnetPadddingSides-2), " ")
+	s += legendString + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
 
 	return s
 }
