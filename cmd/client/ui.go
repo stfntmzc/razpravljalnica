@@ -724,6 +724,9 @@ func getMessageItemsString(m model, currLineIndex int) string {
 		if printLegend[i] && messageIds[m.cursorMessagesIndex] == messageIds[i] {
 			//printLegend = false
 			legendString := "l - like"
+			if m.messages[int64(messageIds[i])].UserId == m.client.clientState.User.Id {
+				legendString = "e - edit " + verticalLineChar + " d - delete"
+			}
 			line += getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+messageItemWidth+2*contnetPadddingSides), " ")
 			line += legendString
 		} else {
