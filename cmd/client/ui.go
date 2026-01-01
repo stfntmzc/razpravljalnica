@@ -75,6 +75,7 @@ type model struct {
 	openTopicId         int64
 	messages            map[int64]client.UiMessageItem
 	cursorMessagesIndex int
+	selectedMessageId   int
 	messagesStartIndex  int
 	messagesEndIndex    int
 
@@ -108,6 +109,11 @@ type listMessagesMsg struct {
 type createTopicMsg struct {
 	id  int64
 	err error
+}
+
+type likeMessageMsg struct {
+	messageID int
+	err       error
 }
 
 func initialModel() model {
@@ -288,6 +294,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.messagesStartIndex = max(0, m.messagesEndIndex-viewportHeight)
 						}
 					}
+				case "q":
+					m.quitting = true
+					return m, tea.Quit
+				case "l":
+					messageId := getSelectedMessageId(m)
+					//fmt.Printf("%d", messageId)
+					return m, likeMessageCmd(m, messageId)
 				}
 			} else {
 				switch msg.String() {
@@ -416,6 +429,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			viewport := contentHeight - 2*contnetPadddingTopBottom - 2
 			m.messagesEndIndex = m.cursorMessagesIndex
 			m.messagesStartIndex = max(0, m.messagesEndIndex-viewport+1)
+
+			return m, nil
+		case likeMessageMsg:
+			if msg.err != nil {
+				return m, nil
+			}
+			message := m.messages[int64(msg.messageID)]
+			message.Likes++
+			m.messages[int64(msg.messageID)] = message
 
 			return m, nil
 		}
@@ -742,6 +764,7 @@ func getMessageItemsString(m model, currLineIndex int) string {
 		}
 		prevMessageId = messageIds[i]*/
 	}
+	m.selectedMessageId = messageIds[m.cursorMessagesIndex]
 
 	// zapolnemo stran če je prazna
 	viewport := contentHeight - 2*contnetPadddingTopBottom - 2
@@ -879,6 +902,16 @@ func createTopicCmd(m model, name string) tea.Cmd {
 	}
 }
 
+func likeMessageCmd(m model, messageID int) tea.Cmd {
+	return func() tea.Msg {
+		err := client.LikeMessage(m.client.clientState, int64(messageID))
+		return likeMessageMsg{
+			messageID: messageID,
+			err:       err,
+		}
+	}
+}
+
 // pomozna
 func digits(n int64) int {
 	if n == 0 {
@@ -975,6 +1008,20 @@ func getLastMessageCursorIndex(m model) int {
 	}
 
 	return len(content) - 1
+}
+
+func getSelectedMessageId(m model) int {
+	messages := make([]client.UiMessageItem, 0, len(m.messages))
+	for _, msg := range m.messages {
+		messages = append(messages, msg)
+	}
+
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Timestamp.AsTime().Before(messages[j].Timestamp.AsTime())
+	})
+
+	_, messageIds, _ := buildContentMessages(m, messages)
+	return messageIds[m.cursorMessagesIndex]
 }
 
 func RunUI() {
