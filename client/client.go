@@ -160,6 +160,24 @@ func newtopicHandler(clientState *ClientState, args []string) {
 	fmt.Printf("New topic created: Name=%s, Id=%d\n", topic.Name, topic.Id)
 }
 
+// za ui
+func CreateTopic(clientState *ClientState, name string) error {
+	if name == "" {
+		return fmt.Errorf("topic can't have empty name")
+	}
+
+	req := &pb.CreateTopicRequest{
+		Name:   name,
+		UserId: clientState.user.Id,
+	}
+	_, err := clientState.rpcHead.CreateTopic(clientState.ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+	//fmt.Printf("New topic created: Name=%s, Id=%d\n", topic.Name, topic.Id)
+}
+
 func editHandler(clientState *ClientState, args []string) {
 	if len(args) <= 1 {
 		fmt.Println("Usage: /edit <message_id> <updated_message>")

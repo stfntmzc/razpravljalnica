@@ -22,6 +22,8 @@ const (
 	contnetPadddingSides     = 3
 	contnetPadddingTopBottom = 1
 
+	maxTopicNameLength = 53
+
 	tabsPadding = 1
 
 	footerHeight = 1
@@ -57,6 +59,10 @@ type model struct {
 	contentStartIndexes map[int]int // key je index od taba
 	contentEndIndexes   map[int]int // key je index od taba
 
+	// za ustvaranje topica
+	createTopicMode  bool
+	createTopicInput textinput.Model
+
 	// client
 	client connectResultMsg
 
@@ -73,9 +79,14 @@ type listTopicsMsg struct {
 	err    error
 }
 
+type createTopicMsg struct {
+	err error
+}
+
 func initialModel() model {
 	inputs := make([]textinput.Model, 3)
 
+	// login text input
 	inputs[0] = textinput.New()
 	inputs[0].Placeholder = "Username"
 	inputs[0].Focus()
@@ -91,6 +102,13 @@ func initialModel() model {
 	inputs[1].Prompt = ""
 	inputs[2].Prompt = ""
 
+	// create topic text input
+	createTopicInput := textinput.New()
+	createTopicInput.Placeholder = "Topic name"
+	createTopicInput.CharLimit = maxTopicNameLength
+	createTopicInput.Prompt = ""
+
+	// tabs in indexi
 	tabs := []string{"Topics", "Live chat"}
 	cursorIndexes := make(map[int]int)
 	contentStartIndexes := make(map[int]int)
@@ -109,6 +127,8 @@ func initialModel() model {
 		cursorIndexes:       cursorIndexes,
 		contentStartIndexes: contentStartIndexes,
 		contentEndIndexes:   contentEndIndexes,
+		createTopicInput:    createTopicInput,
+		createTopicMode:     false,
 	}
 }
 
@@ -170,59 +190,92 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	} else {
+		// smo prijavljeni
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			switch msg.String() {
-			case "ctrl+c", "q":
-				m.quitting = true
-				return m, tea.Quit
-			case "right":
-				if m.openTabIndex < len(m.tabs)-1 {
-					m.openTabIndex++
-				}
-			case "left":
-				if m.openTabIndex > 0 {
-					m.openTabIndex--
-				}
-			case "up":
-				if m.tabs[m.openTabIndex] == "Topics" {
-					/*if m.cursorIndexes[m.openTabIndex] > 0 {
-						m.cursorIndexes[m.openTabIndex]--
+			// delamo nov topic
+			if m.createTopicMode {
+				switch msg.String() {
+				case "esc":
+					m.createTopicMode = false
+					m.createTopicInput.SetValue("")
+					m.createTopicInput.Blur()
+					return m, nil
+
+				case "enter":
+					name := m.createTopicInput.Value()
+					if name != "" {
+						m.createTopicMode = false
+						m.createTopicInput.SetValue("")
+						m.createTopicInput.Blur()
+						return m, createTopicCmd(m, name)
 					}
-					if m.cursorIndexes[m.openTabIndex] > 0 {
-						m.cursorIndexes[m.openTabIndex]--
-					} else if m.contentEndIndexes[m.openTabIndex] < len(m.topics)-1 {
-						m.contentStartIndexes[m.openTabIndex]++
-						m.contentEndIndexes[m.openTabIndex]++
-						m.cursorIndexes[m.openTabIndex]++
-					}*/
-					if m.cursorIndexes[m.openTabIndex] > 0 {
-						if m.cursorIndexes[m.openTabIndex] <= m.contentStartIndexes[m.openTabIndex] {
-							m.contentStartIndexes[m.openTabIndex]--
-							m.contentEndIndexes[m.openTabIndex]--
-							m.cursorIndexes[m.openTabIndex]--
-						} else {
+					return m, nil
+				}
+
+				var cmd tea.Cmd
+				m.createTopicInput, cmd = m.createTopicInput.Update(msg)
+				return m, cmd
+			} else {
+				switch msg.String() {
+				case "ctrl+c", "q":
+					m.quitting = true
+					return m, tea.Quit
+				case "c":
+					// delamo nov topic
+					if m.tabs[m.openTabIndex] == "Topics" {
+						m.createTopicMode = true
+						m.createTopicInput.Focus()
+						return m, nil
+					}
+				case "right":
+					if m.openTabIndex < len(m.tabs)-1 {
+						m.openTabIndex++
+					}
+				case "left":
+					if m.openTabIndex > 0 {
+						m.openTabIndex--
+					}
+				case "up":
+					if m.tabs[m.openTabIndex] == "Topics" {
+						/*if m.cursorIndexes[m.openTabIndex] > 0 {
 							m.cursorIndexes[m.openTabIndex]--
 						}
-					}
+						if m.cursorIndexes[m.openTabIndex] > 0 {
+							m.cursorIndexes[m.openTabIndex]--
+						} else if m.contentEndIndexes[m.openTabIndex] < len(m.topics)-1 {
+							m.contentStartIndexes[m.openTabIndex]++
+							m.contentEndIndexes[m.openTabIndex]++
+							m.cursorIndexes[m.openTabIndex]++
+						}*/
+						if m.cursorIndexes[m.openTabIndex] > 0 {
+							if m.cursorIndexes[m.openTabIndex] <= m.contentStartIndexes[m.openTabIndex] {
+								m.contentStartIndexes[m.openTabIndex]--
+								m.contentEndIndexes[m.openTabIndex]--
+								m.cursorIndexes[m.openTabIndex]--
+							} else {
+								m.cursorIndexes[m.openTabIndex]--
+							}
+						}
 
-				} else if m.tabs[m.openTabIndex] == "Live chat" {
-					// TODO
-				}
-			case "down":
-				if m.tabs[m.openTabIndex] == "Topics" {
-					/*if m.cursorIndexes[m.openTabIndex] < 27 {
-						m.cursorIndexes[m.openTabIndex]++
-					}*/
-					if m.cursorIndexes[m.openTabIndex] < m.contentEndIndexes[m.openTabIndex] {
-						m.cursorIndexes[m.openTabIndex]++
-					} else if m.contentEndIndexes[m.openTabIndex] < len(m.topics)-1 {
-						m.contentStartIndexes[m.openTabIndex]++
-						m.contentEndIndexes[m.openTabIndex]++
-						m.cursorIndexes[m.openTabIndex]++
+					} else if m.tabs[m.openTabIndex] == "Live chat" {
+						// TODO
 					}
-				} else if m.tabs[m.openTabIndex] == "Live chat" {
-					// TODO
+				case "down":
+					if m.tabs[m.openTabIndex] == "Topics" {
+						/*if m.cursorIndexes[m.openTabIndex] < 27 {
+							m.cursorIndexes[m.openTabIndex]++
+						}*/
+						if m.cursorIndexes[m.openTabIndex] < m.contentEndIndexes[m.openTabIndex] {
+							m.cursorIndexes[m.openTabIndex]++
+						} else if m.contentEndIndexes[m.openTabIndex] < len(m.topics)-1 {
+							m.contentStartIndexes[m.openTabIndex]++
+							m.contentEndIndexes[m.openTabIndex]++
+							m.cursorIndexes[m.openTabIndex]++
+						}
+					} else if m.tabs[m.openTabIndex] == "Live chat" {
+						// TODO
+					}
 				}
 			}
 		case listTopicsMsg:
@@ -232,13 +285,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.topics = msg.topics
 			return m, nil
+		case createTopicMsg:
+			// naredu se je nov topic
+			if msg.err == nil {
+				// ponovno listamo topice
+				return m, listTopicsCmd(m)
+			}
+			return m, nil
 		}
 		var cmd tea.Cmd
 		m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
 		return m, cmd
 	}
 
-	return m, nil
+	//return m, nil
 }
 
 func (m *model) updateFocus() {
@@ -421,24 +481,28 @@ func getTopicsString(m model) string {
 	// content
 	iStart := m.contentStartIndexes[0]
 	//iEnd := contentHeight - contnetPadddingTopBottom*2 - 1
-	iEnd := m.contentEndIndexes[0]
+	//iEnd := m.contentEndIndexes[0]
+	iEnd := max(contentHeight-contnetPadddingTopBottom*2-1, m.contentEndIndexes[0])
 	for i := iStart; i <= iEnd; i++ {
 		var contentIndex int
 		s += gatMarginLeftString(m) + verticalLineChar
 		if i < len(ids) {
 			// ali je cursor na topicu
-			if m.cursorIndexes[0] == i {
+			if m.cursorIndexes[0] == i && !m.createTopicMode {
 				s += " " + cursorChar + "  "
 				name := m.topics[ids[i]]
 				s += fmt.Sprintf("%s [%d]", name, ids[i])
-				contentIndex = len(name) + digits(ids[i]) + 3 + 4
+				legendString := "r - read messages " + verticalLineChar + " s - subscribe"
+				s += getFillWithString(m, contentWidth-(4+len(name)+digits(ids[i])+3+len(legendString)+contnetPadddingSides-2), " ")
+				s += legendString + getFillWithString(m, contnetPadddingSides, " ")
+				//contentIndex = len(name) + digits(ids[i]) + 3 + 4
 			} else {
 				s += getContnetPaddingSidesString(m)
 				name := m.topics[ids[i]]
 				s += fmt.Sprintf("%s [%d]", name, ids[i])
 				contentIndex = len(name) + digits(ids[i]) + 3 + contnetPadddingSides
+				s += getFillWithString(m, contentWidth-contentIndex, " ")
 			}
-			s += getFillWithString(m, contentWidth-contentIndex, " ")
 			s += verticalLineChar + "\n"
 		} else {
 			s += getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
@@ -449,7 +513,14 @@ func getTopicsString(m model) string {
 	// footer
 	s += gatMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
 	s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
-	s += "c - create new topic" + getFillWithString(m, contentWidth-(len("c - create new topic")+tabsPadding), " ") + verticalLineChar + "\n"
+	if m.createTopicMode {
+		// delamo nov topic
+		line := "New topic: " + m.createTopicInput.View()
+		s += line + getFillWithString(m, contentWidth-(len(line)+tabsPadding)+8, " ") + verticalLineChar + "\n"
+	} else {
+		legendString := "c - create new topic " + verticalLineChar + " q - quit"
+		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-2), " ") + verticalLineChar + "\n"
+	}
 	s += gatMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 
 	return s
@@ -477,6 +548,13 @@ func listTopicsCmd(m model) tea.Cmd {
 			topics: topics,
 			err:    err,
 		}
+	}
+}
+
+func createTopicCmd(m model, name string) tea.Cmd {
+	return func() tea.Msg {
+		err := client.CreateTopic(m.client.clientState, name)
+		return createTopicMsg{err: err}
 	}
 }
 
