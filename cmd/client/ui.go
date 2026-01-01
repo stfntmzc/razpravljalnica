@@ -415,7 +415,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// da vemo od kje do kje pokazati messages
 			viewport := contentHeight - 2*contnetPadddingTopBottom - 2
 			m.messagesEndIndex = m.cursorMessagesIndex
-			m.messagesStartIndex = max(0, m.messagesEndIndex-viewport)
+			m.messagesStartIndex = max(0, m.messagesEndIndex-viewport+1)
 
 			return m, nil
 		}
@@ -662,10 +662,10 @@ func getOpenTopicString(m model) string {
 
 	currLineIndex := contnetPadddingTopBottom
 	// ime topica
-	legendString := "s - subscribe " + verticalLineChar + " b - back"
+	legendString := "s - subscribe"
 	s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getContnetPaddingSidesString(m)
 	s += m.topics[m.openTopicId] + fmt.Sprintf(" [%d]", m.openTopicId)
-	s += getFillWithString(m, contentWidth-(len(m.topics[m.openTopicId])+digits(m.openTopicId)+3+len(legendString)+2*contnetPadddingSides-2), " ")
+	s += getFillWithString(m, contentWidth-(len(m.topics[m.openTopicId])+digits(m.openTopicId)+3+len(legendString)+2*contnetPadddingSides), " ")
 	s += legendString + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
 	currLineIndex++
 	for i := 0; i < messageItemMarginBottom; i++ {
@@ -675,6 +675,20 @@ func getOpenTopicString(m model) string {
 
 	// messages
 	s += getMessageItemsString(m, currLineIndex)
+
+	s += getContnetPaddingTopBottomString(m)
+	// footer
+	s += gatMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
+	s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+	if m.createTopicMode {
+		// delamo nov topic
+		line := "New topic: " + m.createTopicInput.View()
+		s += line + getFillWithString(m, contentWidth-(len(line)+tabsPadding)+8, " ") + verticalLineChar + "\n"
+	} else {
+		legendString := "p - post new message " + verticalLineChar + " b - back " + verticalLineChar + " q - quit"
+		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-4), " ") + verticalLineChar + "\n"
+	}
+	s += gatMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 
 	return s
 }
@@ -698,14 +712,8 @@ func getMessageItemsString(m model, currLineIndex int) string {
 	iStart := m.messagesStartIndex
 	iEnd := min(m.messagesEndIndex, len(content)-1)
 
-	printLegendCounter := 0
+	renderedLines := 0
 	for i := iStart; i <= iEnd; i++ {
-
-		// štejemo, da napišemo legendo v pravem line-u
-		if messageIds[m.cursorMessagesIndex] == messageIds[i] {
-			printLegendCounter++
-		}
-
 		line := gatMarginLeftString(m) + verticalLineChar
 		if m.cursorMessagesIndex == i {
 			line += " > "
@@ -725,10 +733,24 @@ func getMessageItemsString(m model, currLineIndex int) string {
 		line += getContnetPaddingSidesString(m) + verticalLineChar
 		line += fmt.Sprintf("%d %d %d", messageIds[i], messageIds[m.cursorMessagesIndex], m.cursorMessagesIndex)
 		s += line + "\n"
+		renderedLines++
 		/*if prevMessageId != messageIds[i] {
 			printLegend = true
 		}
 		prevMessageId = messageIds[i]*/
+	}
+
+	// zapolnemo stran če je prazna
+	viewport := contentHeight - 2*contnetPadddingTopBottom - 2
+	for renderedLines < viewport {
+		emptyLine :=
+			gatMarginLeftString(m) +
+				verticalLineChar +
+				getFillWithString(m, contentWidth, " ") +
+				verticalLineChar
+
+		s += emptyLine + "\n"
+		renderedLines++
 	}
 
 	return s
