@@ -49,7 +49,7 @@ func Client(username string, urlHead string, urlTail string) (*ClientState, erro
 	}
 	//defer clientState.connHead.Close()
 	//defer clientState.connTail.Close()
-	fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
+	//fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
 
 	return clientState, nil
 
@@ -245,6 +245,19 @@ func listTopicsHandler(clientState *ClientState, args []string) {
 	for _, topic := range response.Topics {
 		fmt.Printf("  [%d] %s\n", topic.Id, topic.Name)
 	}
+}
+
+// za ui
+func GetTopics(clientState *ClientState) (map[int64]string, error) {
+	response, err := clientState.rpcTail.ListTopics(clientState.ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	topics := make(map[int64]string)
+	for _, topic := range response.Topics {
+		topics[topic.Id] = topic.Name
+	}
+	return topics, nil
 }
 
 func listMessagesHandler(clientState *ClientState, args []string) {
@@ -479,7 +492,7 @@ func connectToServer(username string, urlHead string, urlTail string) (*ClientSt
 		cancel()
 		return nil, err
 	}
-	fmt.Printf("Succsessfuly connected to head: %s\n", urlHead)
+	//fmt.Printf("Succsessfuly connected to head: %s\n", urlHead)
 	err = testConnection(clientTail, ctx)
 	if err != nil {
 		connHead.Close()
@@ -487,7 +500,7 @@ func connectToServer(username string, urlHead string, urlTail string) (*ClientSt
 		cancel()
 		return nil, err
 	}
-	fmt.Printf("Succsessfuly connected to tail: %s\n", urlTail)
+	//fmt.Printf("Succsessfuly connected to tail: %s\n", urlTail)
 	// registreramo clienta samo na headu
 	user, err := clientHead.CreateUser(ctx, &pb.CreateUserRequest{Name: username})
 	if err != nil {

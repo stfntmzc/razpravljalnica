@@ -4,9 +4,41 @@ import (
 	"fmt"
 	"os"
 	"razpravljalnica/client"
+	"sort"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+)
+
+// konstante
+const (
+	appTitle = "Razpravljalnica"
+
+	marginLeft = 2
+	marginTop  = 1
+
+	contentWidth             = 100
+	contentHeight            = 30
+	contnetPadddingSides     = 3
+	contnetPadddingTopBottom = 1
+
+	tabsPadding = 1
+
+	footerHeight = 1
+
+	topLeftChar        = "╭"
+	topRightChar       = "╮"
+	bottomLeftChar     = "╰"
+	bottomRightChar    = "╯"
+	horizontalLineChar = "─"
+	verticalLineChar   = "│"
+	TrightChar         = "├"
+	TleftChar          = "┤"
+	TdownChar          = "┬"
+	TupChar            = "┴"
+	crossChar          = "┼"
+
+	cursorChar = ">"
 )
 
 type model struct {
@@ -19,16 +51,26 @@ type model struct {
 	inputs []textinput.Model
 	focus  int
 
-	tabs    []string
-	openTab string
+	tabs                []string
+	openTabIndex        int
+	cursorIndexes       map[int]int // key je index od taba
+	contentStartIndexes map[int]int // key je index od taba
+	contentEndIndexes   map[int]int // key je index od taba
 
 	// client
 	client connectResultMsg
+
+	topics map[int64]string
 }
 
 type connectResultMsg struct {
 	clientState *client.ClientState
 	err         error
+}
+
+type listTopicsMsg struct {
+	topics map[int64]string
+	err    error
 }
 
 func initialModel() model {
@@ -49,9 +91,24 @@ func initialModel() model {
 	inputs[1].Prompt = ""
 	inputs[2].Prompt = ""
 
+	tabs := []string{"Topics", "Live chat"}
+	cursorIndexes := make(map[int]int)
+	contentStartIndexes := make(map[int]int)
+	contentEndIndexes := make(map[int]int)
+	for i := 0; i < len(tabs); i++ {
+		cursorIndexes[i] = 0
+		contentStartIndexes[i] = 0
+		contentEndIndexes[i] = 0
+	}
+
 	return model{
-		inputs: inputs,
-		tabs:   []string{"Topics", "Live chat"},
+		inputs:              inputs,
+		tabs:                tabs,
+		openTabIndex:        0,
+		topics:              make(map[int64]string),
+		cursorIndexes:       cursorIndexes,
+		contentStartIndexes: contentStartIndexes,
+		contentEndIndexes:   contentEndIndexes,
 	}
 }
 
@@ -103,29 +160,82 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loggedIn = false
 				return m, nil
 			}
-			// pocezava vspostavljena
+			// povezava vspostavljena
 			m.client.clientState = msg.clientState
 			m.loggedIn = true
-			return m, nil
+			return m, listTopicsCmd(m)
 		}
-
 		var cmd tea.Cmd
-		if !m.loggedIn {
-			m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
-		}
+		m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
 		return m, cmd
-	}
 
-	if m.loggedIn {
+	} else {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "ctrl+c", "q":
 				m.quitting = true
 				return m, tea.Quit
-			}
-		}
+			case "right":
+				if m.openTabIndex < len(m.tabs)-1 {
+					m.openTabIndex++
+				}
+			case "left":
+				if m.openTabIndex > 0 {
+					m.openTabIndex--
+				}
+			case "up":
+				if m.tabs[m.openTabIndex] == "Topics" {
+					/*if m.cursorIndexes[m.openTabIndex] > 0 {
+						m.cursorIndexes[m.openTabIndex]--
+					}
+					if m.cursorIndexes[m.openTabIndex] > 0 {
+						m.cursorIndexes[m.openTabIndex]--
+					} else if m.contentEndIndexes[m.openTabIndex] < len(m.topics)-1 {
+						m.contentStartIndexes[m.openTabIndex]++
+						m.contentEndIndexes[m.openTabIndex]++
+						m.cursorIndexes[m.openTabIndex]++
+					}*/
+					if m.cursorIndexes[m.openTabIndex] > 0 {
+						if m.cursorIndexes[m.openTabIndex] <= m.contentStartIndexes[m.openTabIndex] {
+							m.contentStartIndexes[m.openTabIndex]--
+							m.contentEndIndexes[m.openTabIndex]--
+							m.cursorIndexes[m.openTabIndex]--
+						} else {
+							m.cursorIndexes[m.openTabIndex]--
+						}
+					}
 
+				} else if m.tabs[m.openTabIndex] == "Live chat" {
+					// TODO
+				}
+			case "down":
+				if m.tabs[m.openTabIndex] == "Topics" {
+					/*if m.cursorIndexes[m.openTabIndex] < 27 {
+						m.cursorIndexes[m.openTabIndex]++
+					}*/
+					if m.cursorIndexes[m.openTabIndex] < m.contentEndIndexes[m.openTabIndex] {
+						m.cursorIndexes[m.openTabIndex]++
+					} else if m.contentEndIndexes[m.openTabIndex] < len(m.topics)-1 {
+						m.contentStartIndexes[m.openTabIndex]++
+						m.contentEndIndexes[m.openTabIndex]++
+						m.cursorIndexes[m.openTabIndex]++
+					}
+				} else if m.tabs[m.openTabIndex] == "Live chat" {
+					// TODO
+				}
+			}
+		case listTopicsMsg:
+			if msg.err != nil {
+				// lahko shranmo error, zaenkrat tkole
+				return m, nil
+			}
+			m.topics = msg.topics
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
@@ -145,7 +255,24 @@ func (m model) View() string {
 	if !m.loggedIn {
 		return loginView(m)
 	}
-	return loginView(m)
+	return homeView(m)
+}
+
+func homeView(m model) string {
+	s := ""
+	// margin
+	for i := 0; i < marginTop; i++ {
+		s += "\n"
+	}
+	for i := 0; i < marginLeft; i++ {
+		s += " "
+	}
+
+	// zgornji rob in tabs
+	s += getTabsString(m) + "\n"
+	s += getContentString(m)
+
+	return s
 }
 
 func loginView(m model) string {
@@ -168,6 +295,166 @@ func loginView(m model) string {
 	return s
 }
 
+func getTabsString(m model) string {
+	s := ""
+	var totalTbasWidth = 0
+	for i := 0; i < len(m.tabs); i++ {
+		s += topLeftChar
+		totalTbasWidth++
+		for j := 0; j < len(m.tabs[i])+2*tabsPadding; j++ {
+			s += horizontalLineChar
+			totalTbasWidth++
+		}
+		s += topRightChar
+		totalTbasWidth++
+	}
+	s += "\n"
+	for i := 0; i < marginLeft; i++ {
+		s += " "
+	}
+	for i := 0; i < len(m.tabs); i++ {
+		s += verticalLineChar
+		for j := 0; j < tabsPadding; j++ {
+			s += " "
+		}
+		s += m.tabs[i]
+		for j := 0; j < tabsPadding; j++ {
+			s += " "
+		}
+		s += verticalLineChar
+	}
+	s += "\n"
+	for i := 0; i < marginLeft; i++ {
+		s += " "
+	}
+	for i := 0; i < len(m.tabs); i++ {
+		if i == m.openTabIndex {
+			if i == 0 {
+				s += verticalLineChar
+			} else {
+				s += bottomRightChar
+			}
+		} else {
+			if i == 0 {
+				s += TrightChar
+			} else {
+				s += TupChar
+			}
+		}
+		for j := 0; j < len(m.tabs[i])+2*tabsPadding; j++ {
+			if i == m.openTabIndex {
+				s += " "
+			} else {
+				s += horizontalLineChar
+			}
+		}
+		if i == m.openTabIndex {
+			s += bottomLeftChar
+		} else {
+			s += TupChar
+		}
+	}
+	s += getFillWithString(m, contentWidth+1-totalTbasWidth, horizontalLineChar) + topRightChar
+	return s
+}
+
+func gatMarginLeftString(m model) string {
+	s := ""
+	for i := 0; i < marginLeft; i++ {
+		s += " "
+	}
+	return s
+}
+
+func getContnetPaddingSidesString(m model) string {
+	s := ""
+	for i := 0; i < contnetPadddingSides; i++ {
+		s += " "
+	}
+	return s
+}
+
+func getFillWithString(m model, len int, c string) string {
+	s := ""
+	for i := 0; i < len; i++ {
+		s += c
+	}
+	return s
+}
+
+func getContnetPaddingTopBottomString(m model) string {
+	s := ""
+	for i := 0; i < contnetPadddingTopBottom; i++ {
+		s += gatMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+	}
+	return s
+}
+
+func getContentString(m model) string {
+	s := ""
+
+	// zgornji padding
+	s += gatMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+
+	// topics -----------------------------
+	if m.tabs[m.openTabIndex] == "Topics" {
+		s += getTopicsString(m)
+	}
+
+	return s
+}
+
+func getTabsPadding(m model) string {
+	return getFillWithString(m, tabsPadding, " ")
+}
+
+func getTopicsString(m model) string {
+	s := ""
+
+	// treba je sortirat po id-jih
+	ids := make([]int64, 0, len(m.topics))
+	for id := range m.topics {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	// content
+	iStart := m.contentStartIndexes[0]
+	//iEnd := contentHeight - contnetPadddingTopBottom*2 - 1
+	iEnd := m.contentEndIndexes[0]
+	for i := iStart; i <= iEnd; i++ {
+		var contentIndex int
+		s += gatMarginLeftString(m) + verticalLineChar
+		if i < len(ids) {
+			// ali je cursor na topicu
+			if m.cursorIndexes[0] == i {
+				s += " " + cursorChar + "  "
+				name := m.topics[ids[i]]
+				s += fmt.Sprintf("%s [%d]", name, ids[i])
+				contentIndex = len(name) + digits(ids[i]) + 3 + 4
+			} else {
+				s += getContnetPaddingSidesString(m)
+				name := m.topics[ids[i]]
+				s += fmt.Sprintf("%s [%d]", name, ids[i])
+				contentIndex = len(name) + digits(ids[i]) + 3 + contnetPadddingSides
+			}
+			s += getFillWithString(m, contentWidth-contentIndex, " ")
+			s += verticalLineChar + "\n"
+		} else {
+			s += getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+		}
+	}
+	s += getContnetPaddingTopBottomString(m)
+
+	// footer
+	s += gatMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
+	s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+	s += "c - create new topic" + getFillWithString(m, contentWidth-(len("c - create new topic")+tabsPadding), " ") + verticalLineChar + "\n"
+	s += gatMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
+
+	return s
+}
+
 func connectCmd(username string, head string, tail string) tea.Cmd {
 	return func() tea.Msg {
 		c, err := client.Client(username, head, tail)
@@ -176,6 +463,38 @@ func connectCmd(username string, head string, tail string) tea.Cmd {
 			err:         err,
 		}
 	}
+}
+
+func listTopicsCmd(m model) tea.Cmd {
+	return func() tea.Msg {
+		topics, err := client.GetTopics(m.client.clientState)
+		if len(topics) > contentHeight-2*contnetPadddingTopBottom {
+			m.contentEndIndexes[0] = contentHeight - 2*contnetPadddingTopBottom - 1
+		} else {
+			m.contentEndIndexes[0] = len(topics) - 1
+		}
+		return listTopicsMsg{
+			topics: topics,
+			err:    err,
+		}
+	}
+}
+
+// pomozna
+func digits(n int64) int {
+	if n == 0 {
+		return 1
+	}
+	if n < 0 {
+		n = -n
+	}
+
+	count := 0
+	for n > 0 {
+		n /= 10
+		count++
+	}
+	return count
 }
 
 func RunUI() {
