@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type CommandHandler func(clientState *ClientState, args []string)
@@ -22,7 +23,7 @@ type ClientState struct {
 	rpcHead       pb.MessageBoardClient
 	connTail      *grpc.ClientConn
 	rpcTail       pb.MessageBoardClient
-	user          *pb.User
+	User          *pb.User
 	ctx           context.Context
 	cancel        context.CancelFunc
 	subscriptions map[int64]Subscription // topic id -> subscription
@@ -124,7 +125,7 @@ func writeHandler(clientState *ClientState, args []string) {
 	// naredimo message request
 	req := &pb.PostMessageRequest{
 		TopicId: topicID,
-		UserId:  clientState.user.Id,
+		UserId:  clientState.User.Id,
 		Text:    text,
 	}
 
@@ -150,7 +151,7 @@ func newtopicHandler(clientState *ClientState, args []string) {
 	name := strings.Join(args, " ")
 	req := &pb.CreateTopicRequest{
 		Name:   name,
-		UserId: clientState.user.Id,
+		UserId: clientState.User.Id,
 	}
 	topic, err := clientState.rpcHead.CreateTopic(clientState.ctx, req)
 	if err != nil {
@@ -168,7 +169,7 @@ func CreateTopic(clientState *ClientState, name string) error {
 
 	req := &pb.CreateTopicRequest{
 		Name:   name,
-		UserId: clientState.user.Id,
+		UserId: clientState.User.Id,
 	}
 	_, err := clientState.rpcHead.CreateTopic(clientState.ctx, req)
 	if err != nil {
@@ -215,7 +216,7 @@ func delHandler(clientState *ClientState, args []string) {
 	}
 	req := &pb.DeleteMessageRequest{
 		MessageId: messageId,
-		UserId:    clientState.user.Id,
+		UserId:    clientState.User.Id,
 	}
 	_, err2 := clientState.rpcHead.DeleteMessage(clientState.ctx, req)
 	if err2 != nil {
@@ -240,7 +241,7 @@ func likeHandler(clientState *ClientState, args []string) {
 
 	req := &pb.LikeMessageRequest{
 		MessageId: messageId,
-		UserId:    clientState.user.Id,
+		UserId:    clientState.User.Id,
 	}
 
 	msg, err := clientState.rpcHead.LikeMessage(clientState.ctx, req)
@@ -315,6 +316,42 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 	}
 }
 
+// za ui
+type UiMessageItem struct {
+	Username  string
+	UserId    int64
+	Id        int64
+	Timestamp *timestamppb.Timestamp
+	Likes     int64
+	Text      []string // array stringov širine messageItemWidth
+}
+
+func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageItem, error) {
+	req := &pb.GetMessagesRequest{
+		TopicId:       topicId,
+		FromMessageId: 0,
+		Limit:         -1,
+	}
+	messages, err := clientState.rpcTail.GetMessages(clientState.ctx, req)
+	if err != nil {
+		//fmt.Println("Error getting messages:", err)
+		return nil, fmt.Errorf("Error getting messages")
+	}
+	// naredimo map
+	uiMessages := make(map[int64]UiMessageItem)
+	for _, msg := range messages.Messages {
+		uiMessages[msg.Id] = UiMessageItem{
+			Username:  fmt.Sprintf("user_%d", msg.UserId), // začasno
+			UserId:    msg.UserId,
+			Id:        msg.Id,
+			Timestamp: msg.CreatedAt,
+			Likes:     int64(msg.Likes),
+			Text:      []string{msg.Text},
+		}
+	}
+	return uiMessages, nil
+}
+
 func getSubscriptionNodeHandler(clientState *ClientState, args []string) {
 	fmt.Println("Ne rabima se zaj")
 }
@@ -349,7 +386,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 
 		// tukej dobimo subscribe node
 		nodeReq := &pb.SubscriptionNodeRequest{
-			UserId:  clientState.user.Id,
+			UserId:  clientState.User.Id,
 			TopicId: []int64{topicId},
 		}
 		// dobimo subscription node
@@ -362,7 +399,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		// za vsak slučaj, če kaj faila, da pošljemo expire request
 		expireSubReq := &pb.ExpireSubscriptionRequest{
 			Token:  subNodeResponce.SubscribeToken,
-			UserId: clientState.user.Id,
+			UserId: clientState.User.Id,
 			NodeId: subNodeResponce.Node.NodeId,
 		}
 		// povežemo se na subscribe node
@@ -396,7 +433,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		// zahtevamo subscription za topic
 		topicReq := &pb.SubscribeTopicRequest{
 			TopicId:        []int64{topicId},
-			UserId:         clientState.user.Id,
+			UserId:         clientState.User.Id,
 			SubscribeToken: subNodeResponce.SubscribeToken,
 		}
 
@@ -460,7 +497,7 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 		if exists {
 			req := &pb.ExpireSubscriptionRequest{
 				Token:  clientState.subscriptions[topicId].token,
-				UserId: clientState.user.Id,
+				UserId: clientState.User.Id,
 			}
 			_, err := clientState.rpcHead.ExpireSubscription(clientState.ctx, req)
 			if err != nil {
@@ -533,7 +570,7 @@ func connectToServer(username string, urlHead string, urlTail string) (*ClientSt
 		rpcHead:       clientHead,
 		connTail:      connTail,
 		rpcTail:       clientTail,
-		user:          user,
+		User:          user,
 		ctx:           ctx,
 		cancel:        cancel,
 		subscriptions: make(map[int64]Subscription),

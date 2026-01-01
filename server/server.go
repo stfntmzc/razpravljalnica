@@ -436,15 +436,28 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 	from_id := req.FromMessageId
 	limit := req.Limit
 
-	messages_slice := make([]*pb.Message, 0, limit)
+	var messages_slice []*pb.Message
+	if req.Limit > 0 {
+		messages_slice = make([]*pb.Message, 0, req.Limit)
+	} else {
+		messages_slice = make([]*pb.Message, 0)
+	}
 
 	i := int32(0)
 
 	for _, message := range server.messages {
-		if from_id <= message.Id && topic_id == message.TopicId && i < limit {
+		/*if from_id <= message.Id && topic_id == message.TopicId && i < limit {
 			i += 1
 			messages_slice = append(messages_slice, message)
+		}*/
+		if message.TopicId != topic_id || message.Id < from_id {
+			continue
 		}
+		if limit != -1 && i >= limit {
+			break
+		}
+		messages_slice = append(messages_slice, message)
+		i++
 	}
 
 	response := &pb.GetMessagesResponse{

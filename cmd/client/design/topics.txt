@@ -44,36 +44,36 @@
   │ Topics ││ Live chat │
   │        ╰┴───────────┴──────────────────────────────────────────────────────────────────────────────╮
   │                                                                                                    │
-  │   topic x [9]                                                           s - subscribe │ b - back   │
+  │   topic x [9]                                                                      s - subscribe   │
   │                                                                                                    │
-  │   user 1:                                                                                          │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │                                                                                                    │
+  │   user 1:                                                          6 likes                         │
   │   Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at                         │
   │   molestie mauris, in pulvinar velit.                                                              │
   │                                                                                                    │
-  │   user 1:                                                                                          │
+  │   user 1:                                                          6 likes                         │
   │ > Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at              l - like   │
   │   molestie mauris, in pulvinar velit.                                                              │
   │                                                                                                    │
-  │   user 1:                                                                                          │
+  │   user 1:                                                          6 likes                         │
   │   Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at                         │
   │   molestie mauris, in pulvinar velit.                                                              │
   │                                                                                                    │
-  │   user 1:                                                                                          │
-  │ > Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque at   e -edit │ d -delete   │
-  │   molestie mauris, in pulvinar velit.                                                              │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
-  │                                                                                                    │
+  │   user 1:                                                         6 likes                          │
+  │ > Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque a   e - edit │ d - delete  │
+  │   t molestie mauris, in pulvinar velit.                                                            │
   │                                                                                                    │
   ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ w - write message │ q - quit                                                                       │
+  │ w - write message │ b - back │ q - quit                                                            │
   ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 

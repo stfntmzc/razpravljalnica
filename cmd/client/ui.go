@@ -5,9 +5,13 @@ import (
 	"os"
 	"razpravljalnica/client"
 	"sort"
+	"strings"
+
+	"github.com/mattn/go-runewidth"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // konstante
@@ -41,7 +45,7 @@ const (
 	crossChar          = "┼"
 
 	// message item stvari
-	messageItemWidth        = 72
+	messageItemWidth        = 71
 	messageItemMarginBottom = 1
 
 	cursorChar = ">"
@@ -69,15 +73,18 @@ type model struct {
 	topics           map[int64]string
 	// messages
 	openTopicId int64
-	messages    map[int64]messageItem
+	messages    map[int64]client.UiMessageItem
 
 	// client
 	client connectResultMsg
 }
 
 type messageItem struct {
-	username string
-	text     []string // array stringov širine messageItemWidth
+	username  string
+	id        int64
+	timestamp *timestamppb.Timestamp
+	likes     int64
+	text      []string // array stringov širine messageItemWidth
 }
 
 type connectResultMsg struct {
@@ -88,6 +95,11 @@ type connectResultMsg struct {
 type listTopicsMsg struct {
 	topics map[int64]string
 	err    error
+}
+
+type listMessagesMsg struct {
+	messages map[int64]client.UiMessageItem
+	err      error
 }
 
 type createTopicMsg struct {
@@ -133,7 +145,7 @@ func initialModel() model {
 
 	// odprt topic
 	openTopicId := -1
-	messages := make(map[int64]messageItem)
+	messages := make(map[int64]client.UiMessageItem)
 
 	return model{
 		inputs:              inputs,
@@ -318,6 +330,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						topicId := m.cursorIndexes[0]
 						m.openTopicId = int64(ids[topicId])
+
+						m.openTopicId = int64(ids[topicId])
+						m.messages = make(map[int64]client.UiMessageItem) // reset
+						return m, listMessagesCmd(m)
 					}
 				}
 			}
@@ -360,6 +376,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// ponovno listamo topice
 				return m, listTopicsCmd(m)
 			}
+			return m, nil
+		case listMessagesMsg:
+			if msg.err != nil {
+				return m, nil
+			}
+			m.messages = msg.messages
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -603,12 +625,70 @@ func getTopicsString(m model) string {
 func getOpenTopicString(m model) string {
 	s := ""
 
+	currLineIndex := contnetPadddingTopBottom
 	// ime topica
 	legendString := "s - subscribe " + verticalLineChar + " b - back"
 	s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getContnetPaddingSidesString(m)
 	s += m.topics[m.openTopicId] + fmt.Sprintf(" [%d]", m.openTopicId)
 	s += getFillWithString(m, contentWidth-(len(m.topics[m.openTopicId])+digits(m.openTopicId)+3+len(legendString)+2*contnetPadddingSides-2), " ")
 	s += legendString + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
+	currLineIndex++
+	for i := 0; i < messageItemMarginBottom; i++ {
+		s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+		currLineIndex++
+	}
+
+	// messages
+	s += getMessageItemsString(m, currLineIndex)
+
+	return s
+}
+
+func getMessageItemsString(m model, currLineIndex int) string {
+	s := ""
+
+	messages := make([]client.UiMessageItem, 0, len(m.messages))
+	for _, message := range m.messages {
+		messages = append(messages, message)
+	}
+
+	// sortiramo po timestamp
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Timestamp.AsTime().Before(messages[j].Timestamp.AsTime())
+	})
+
+	for _, message := range messages {
+		// avtor, likes
+		nameString := fmt.Sprintf("%s [%d]", message.Username, message.Id)
+		likesString := fmt.Sprintf("%d likes", message.Likes)
+		nameAndLikesString := nameString + getFillWithString(m, messageItemWidth-(len(nameString)+len(likesString)), " ") + likesString
+		filler := getFillWithString(m, contentWidth-(messageItemWidth+2*contnetPadddingSides), " ")
+
+		s += gatMarginLeftString(m) + verticalLineChar + getContnetPaddingSidesString(m) + nameAndLikesString + filler + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
+
+		// vsebina sporočila
+		for _, line := range message.Text {
+
+			filler := getFillWithString(
+				m,
+				contentWidth-(messageItemWidth+2*contnetPadddingSides),
+				" ",
+			)
+
+			s += gatMarginLeftString(m) +
+				verticalLineChar +
+				getContnetPaddingSidesString(m) +
+				line +
+				filler +
+				getContnetPaddingSidesString(m) +
+				verticalLineChar + "\n"
+		}
+
+		// spodnji margin
+		for i := 0; i < messageItemMarginBottom; i++ {
+			s += gatMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+		}
+	}
 
 	return s
 }
@@ -638,6 +718,18 @@ func listTopicsCmd(m model) tea.Cmd {
 	}
 }
 
+func listMessagesCmd(m model) tea.Cmd {
+	return func() tea.Msg {
+		messages, err := client.ListMessages(m.client.clientState, m.openTopicId)
+		// formatiramo text v vrstice
+		messages = formatMessageItemsText(messages)
+		return listMessagesMsg{
+			messages: messages,
+			err:      err,
+		}
+	}
+}
+
 func createTopicCmd(m model, name string) tea.Cmd {
 	return func() tea.Msg {
 		err := client.CreateTopic(m.client.clientState, name)
@@ -660,6 +752,57 @@ func digits(n int64) int {
 		count++
 	}
 	return count
+}
+
+func formatMessageItemsText(messages map[int64]client.UiMessageItem) map[int64]client.UiMessageItem {
+	for id, message := range messages {
+		message.Text = wrapText(message.Text[0], messageItemWidth)
+		messages[id] = message
+	}
+	return messages
+}
+
+func wrapText(text string, width int) []string {
+	var lines []string
+	var currentLine string
+	currentWidth := 0
+
+	words := strings.Fields(text)
+
+	for _, word := range words {
+		wordWidth := runewidth.StringWidth(word)
+
+		if currentLine == "" {
+			currentLine = word
+			currentWidth = wordWidth
+			continue
+		}
+
+		if currentWidth+1+wordWidth <= width {
+			currentLine += " " + word
+			currentWidth += 1 + wordWidth
+		} else {
+			// zapolni do točne širine
+			for currentWidth < width {
+				currentLine += " "
+				currentWidth++
+			}
+			lines = append(lines, currentLine)
+
+			currentLine = word
+			currentWidth = wordWidth
+		}
+	}
+
+	if currentLine != "" {
+		for currentWidth < width {
+			currentLine += " "
+			currentWidth++
+		}
+		lines = append(lines, currentLine)
+	}
+
+	return lines
 }
 
 func RunUI() {
