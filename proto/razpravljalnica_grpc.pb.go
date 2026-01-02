@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             v6.33.2
-// source: razpravljalnica.proto
+// source: proto/razpravljalnica.proto
 
 package razpravljalnica
 
@@ -608,7 +608,7 @@ var MessageBoard_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "razpravljalnica.proto",
+	Metadata: "proto/razpravljalnica.proto",
 }
 
 const (
@@ -714,5 +714,183 @@ var ControlPlane_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "razpravljalnica.proto",
+	Metadata: "proto/razpravljalnica.proto",
+}
+
+const (
+	Orchestrator_RegisterNode_FullMethodName    = "/razpravljalnica.Orchestrator/RegisterNode"
+	Orchestrator_Heartbeat_FullMethodName       = "/razpravljalnica.Orchestrator/Heartbeat"
+	Orchestrator_GetClusterState_FullMethodName = "/razpravljalnica.Orchestrator/GetClusterState"
+)
+
+// OrchestratorClient is the client API for Orchestrator service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type OrchestratorClient interface {
+	RegisterNode(ctx context.Context, in *RegisterNodeRequest, opts ...grpc.CallOption) (*RegisterNodeResponse, error)
+	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
+	GetClusterState(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetClusterStateResponse, error)
+}
+
+type orchestratorClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewOrchestratorClient(cc grpc.ClientConnInterface) OrchestratorClient {
+	return &orchestratorClient{cc}
+}
+
+func (c *orchestratorClient) RegisterNode(ctx context.Context, in *RegisterNodeRequest, opts ...grpc.CallOption) (*RegisterNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterNodeResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_RegisterNode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orchestratorClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeartbeatResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_Heartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orchestratorClient) GetClusterState(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetClusterStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetClusterStateResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_GetClusterState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// OrchestratorServer is the server API for Orchestrator service.
+// All implementations must embed UnimplementedOrchestratorServer
+// for forward compatibility.
+type OrchestratorServer interface {
+	RegisterNode(context.Context, *RegisterNodeRequest) (*RegisterNodeResponse, error)
+	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
+	GetClusterState(context.Context, *emptypb.Empty) (*GetClusterStateResponse, error)
+	mustEmbedUnimplementedOrchestratorServer()
+}
+
+// UnimplementedOrchestratorServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedOrchestratorServer struct{}
+
+func (UnimplementedOrchestratorServer) RegisterNode(context.Context, *RegisterNodeRequest) (*RegisterNodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterNode not implemented")
+}
+func (UnimplementedOrchestratorServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
+}
+func (UnimplementedOrchestratorServer) GetClusterState(context.Context, *emptypb.Empty) (*GetClusterStateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetClusterState not implemented")
+}
+func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
+func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
+
+// UnsafeOrchestratorServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to OrchestratorServer will
+// result in compilation errors.
+type UnsafeOrchestratorServer interface {
+	mustEmbedUnimplementedOrchestratorServer()
+}
+
+func RegisterOrchestratorServer(s grpc.ServiceRegistrar, srv OrchestratorServer) {
+	// If the following call panics, it indicates UnimplementedOrchestratorServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&Orchestrator_ServiceDesc, srv)
+}
+
+func _Orchestrator_RegisterNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).RegisterNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_RegisterNode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).RegisterNode(ctx, req.(*RegisterNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Orchestrator_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).Heartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_Heartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).Heartbeat(ctx, req.(*HeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Orchestrator_GetClusterState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).GetClusterState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_GetClusterState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).GetClusterState(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Orchestrator_ServiceDesc is the grpc.ServiceDesc for Orchestrator service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Orchestrator_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "razpravljalnica.Orchestrator",
+	HandlerType: (*OrchestratorServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RegisterNode",
+			Handler:    _Orchestrator_RegisterNode_Handler,
+		},
+		{
+			MethodName: "Heartbeat",
+			Handler:    _Orchestrator_Heartbeat_Handler,
+		},
+		{
+			MethodName: "GetClusterState",
+			Handler:    _Orchestrator_GetClusterState_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/razpravljalnica.proto",
 }
