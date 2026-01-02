@@ -48,6 +48,8 @@ const (
 	messageItemWidth        = 71
 	messageItemMarginBottom = 1
 
+	newMessageInputHeight = 2
+
 	cursorChar = ">"
 )
 
@@ -78,6 +80,8 @@ type model struct {
 	selectedMessageId   int
 	messagesStartIndex  int
 	messagesEndIndex    int
+	postNewMessageMode  bool
+	postNewMessageInput textinput.Model
 
 	// client
 	client connectResultMsg
@@ -116,6 +120,11 @@ type likeMessageMsg struct {
 	err       error
 }
 
+type postNewMessageMsg struct {
+	message *client.UiMessageItem
+	err     error
+}
+
 func initialModel() model {
 	inputs := make([]textinput.Model, 3)
 
@@ -140,6 +149,12 @@ func initialModel() model {
 	createTopicInput.Placeholder = "Topic name"
 	createTopicInput.CharLimit = maxTopicNameLength
 	createTopicInput.Prompt = ""
+
+	// post message text input
+	postNewMessageInput := textinput.New()
+	postNewMessageInput.Placeholder = "New message"
+	postNewMessageInput.CharLimit = messageItemWidth * (newMessageInputHeight + 1)
+	postNewMessageInput.Prompt = ""
 
 	// tabs in indexi
 	tabs := []string{"Topics", "Live chat"}
@@ -168,6 +183,8 @@ func initialModel() model {
 		createTopicMode:     false,
 		openTopicId:         int64(openTopicId),
 		messages:            messages,
+		postNewMessageMode:  false,
+		postNewMessageInput: postNewMessageInput,
 	}
 }
 
@@ -255,6 +272,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var cmd tea.Cmd
 				m.createTopicInput, cmd = m.createTopicInput.Update(msg)
 				return m, cmd
+			} else if m.postNewMessageMode {
+				// postamo nov message
+				switch msg.String() {
+				case "esc":
+					m.postNewMessageMode = false
+					m.postNewMessageInput.SetValue("")
+					m.postNewMessageInput.Blur()
+					m.messagesStartIndex -= newMessageInputHeight
+					return m, nil
+				case "enter":
+					text := m.postNewMessageInput.Value()
+
+					wrapped := wrapText(text, messageItemWidth)
+					// damo stran vrstice, ki jih je preveč
+					if len(wrapped) > newMessageInputHeight+1 {
+						wrapped = wrapped[:newMessageInputHeight+1]
+					}
+					// združimo nazaj
+					limitedText := strings.Join(wrapped, " ")
+					if limitedText != "" {
+						m.postNewMessageMode = false
+						m.postNewMessageInput.SetValue("")
+						m.postNewMessageInput.Blur()
+						m.messagesStartIndex -= newMessageInputHeight
+						return m, postNewMessageCmd(m, limitedText)
+					}
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.postNewMessageInput, cmd = m.postNewMessageInput.Update(msg)
+				return m, cmd
 			} else if m.openTopicId != -1 {
 				// beremo sporočil nekega topica
 				switch msg.String() {
@@ -299,8 +347,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				case "l":
 					messageId := getSelectedMessageId(m)
-					//fmt.Printf("%d", messageId)
 					return m, likeMessageCmd(m, messageId)
+				case "p":
+					// postamo nov message
+					m.messagesStartIndex += newMessageInputHeight
+					m.postNewMessageMode = true
+					m.postNewMessageInput.Focus()
+					return m, nil
 				}
 			} else {
 				switch msg.String() {
@@ -438,8 +491,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			message := m.messages[int64(msg.messageID)]
 			message.Likes++
 			m.messages[int64(msg.messageID)] = message
-
 			return m, nil
+		case postNewMessageMsg:
+			if msg.err != nil {
+				return m, nil
+			}
+			//m.messages[msg.message.Id] = *msg.message
+			return m, listMessagesCmd(m)
 		}
 		var cmd tea.Cmd
 		m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
@@ -701,12 +759,31 @@ func getOpenTopicString(m model) string {
 	s += getContnetPaddingTopBottomString(m)
 	// footer
 	s += gatMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
-	s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
-	if m.createTopicMode {
-		// delamo nov topic
-		line := "New topic: " + m.createTopicInput.View()
-		s += line + getFillWithString(m, contentWidth-(len(line)+tabsPadding)+8, " ") + verticalLineChar + "\n"
+
+	if m.postNewMessageMode {
+		// delamo nov message
+		wrappedInput := wrapText(m.postNewMessageInput.Value(), messageItemWidth)
+		if len(wrappedInput) == 0 {
+			wrappedInput = []string{""}
+		}
+		prefix := "New message: "
+		for i := 0; i < newMessageInputHeight+1; i++ {
+			s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+			var line string
+			if i < len(wrappedInput) {
+				line = wrappedInput[i]
+			}
+			if i == 0 {
+				s += prefix + line
+			} else {
+				s += getFillWithString(m, len(prefix), " ") + line
+			}
+			s += getFillWithString(m, contentWidth-(len(prefix)+runewidth.StringWidth(line)+tabsPadding), " ")
+			s += verticalLineChar + "\n"
+		}
+
 	} else {
+		s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 		legendString := "p - post new message " + verticalLineChar + " b - back " + verticalLineChar + " q - quit"
 		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-4), " ") + verticalLineChar + "\n"
 	}
@@ -737,13 +814,13 @@ func getMessageItemsString(m model, currLineIndex int) string {
 	renderedLines := 0
 	for i := iStart; i <= iEnd; i++ {
 		line := gatMarginLeftString(m) + verticalLineChar
-		if m.cursorMessagesIndex == i {
+		if m.cursorMessagesIndex == i && !m.postNewMessageMode {
 			line += " > "
 		} else {
 			line += getContnetPaddingSidesString(m)
 		}
 		line += content[i]
-		if printLegend[i] && messageIds[m.cursorMessagesIndex] == messageIds[i] {
+		if printLegend[i] && messageIds[m.cursorMessagesIndex] == messageIds[i] && !m.postNewMessageMode {
 			//printLegend = false
 			legendString := "l - like"
 			if m.messages[int64(messageIds[i])].UserId == m.client.clientState.User.Id {
@@ -768,6 +845,9 @@ func getMessageItemsString(m model, currLineIndex int) string {
 
 	// zapolnemo stran če je prazna
 	viewport := contentHeight - 2*contnetPadddingTopBottom - 2
+	if m.postNewMessageMode {
+		viewport -= newMessageInputHeight
+	}
 	for renderedLines < viewport {
 		emptyLine :=
 			gatMarginLeftString(m) +
@@ -908,6 +988,16 @@ func likeMessageCmd(m model, messageID int) tea.Cmd {
 		return likeMessageMsg{
 			messageID: messageID,
 			err:       err,
+		}
+	}
+}
+
+func postNewMessageCmd(m model, message string) tea.Cmd {
+	return func() tea.Msg {
+		message, err := client.PostMessage(m.client.clientState, m.openTopicId, message)
+		return postNewMessageMsg{
+			message: message,
+			err:     err,
 		}
 	}
 }

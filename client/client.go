@@ -137,6 +137,27 @@ func writeHandler(clientState *ClientState, args []string) {
 	fmt.Printf("Message posted on topic %d: %s\n", message.TopicId, message.Text)
 }
 
+// za ui
+func PostMessage(clientState *ClientState, topicId int64, text string) (*UiMessageItem, error) {
+	req := &pb.PostMessageRequest{
+		TopicId: topicId,
+		UserId:  clientState.User.Id,
+		Text:    text,
+	}
+	message, err := clientState.rpcHead.PostMessage(clientState.ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	//fmt.Printf("Message posted on topic %d: %s\n", message.TopicId, message.Text)
+	return &UiMessageItem{
+		Username:  clientState.User.Name,
+		UserId:    clientState.User.Id,
+		Timestamp: message.CreatedAt,
+		Likes:     0,
+		Text:      []string{message.Text},
+	}, nil
+}
+
 func quitHandler(clientState *ClientState, args []string) {
 	// pošlje signal v kanal
 	clientState.cancel()
