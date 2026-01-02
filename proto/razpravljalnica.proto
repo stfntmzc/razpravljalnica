@@ -208,6 +208,7 @@ service Orchestrator {
     rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
     rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
     rpc GetClusterState(google.protobuf.Empty) returns (GetClusterStateResponse);
+    rpc GetSubscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
 }
 
 message RegisterNodeRequest {

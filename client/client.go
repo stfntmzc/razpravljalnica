@@ -27,7 +27,10 @@ type ClientState struct {
 	user          *pb.User
 	ctx           context.Context
 	cancel        context.CancelFunc
-	subscriptions map[int64]Subscription // topic id -> subscription
+	subscriptions map[int64]Subscription
+	orchClient    pb.OrchestratorClient
+	subConn       *grpc.ClientConn
+	subCancel     context.CancelFunc
 }
 type Subscription struct {
 	connSub   *grpc.ClientConn
@@ -293,6 +296,13 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		return
 	}
 
+	if clientState.subCancel != nil {
+		clientState.subCancel()
+	}
+	if clientState.subConn != nil {
+		clientState.subConn.Close()
+	}
+
 	var topicIds []int64
 	for _, arg := range args {
 		var id int64
@@ -304,148 +314,84 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		topicIds = append(topicIds, id)
 	}
 
-	// Za vsak topik naredimo ločeno subscription
-	for _, topicId := range topicIds {
-		// Če je že subscribed, preskočimo
-		if _, exists := clientState.subscriptions[topicId]; exists {
-			fmt.Printf("Already subscribed to topic with id %d\n", topicId)
-			continue
-		}
-
-		// Naredimo ločen context za to subscription
-		subCtx, cancel := context.WithCancel(clientState.ctx)
-
-		// tukej dobimo subscribe node
-		nodeReq := &pb.SubscriptionNodeRequest{
-			UserId:  clientState.user.Id,
-			TopicId: []int64{topicId},
-		}
-		// dobimo subscription node
-		subNodeResponce, err := clientState.rpcHead.GetSubscriptionNode(subCtx, nodeReq)
-		if err != nil {
-			fmt.Printf("Getting subscription node unsucsessful: %s\n", err)
-			continue
-		}
-		// za vsak slučaj, če kaj faila, da pošljemo expire request
-		expireSubReq := &pb.ExpireSubscriptionRequest{
-			Token:  subNodeResponce.SubscribeToken,
-			UserId: clientState.user.Id,
-			NodeId: subNodeResponce.Node.NodeId,
-		}
-		// povežemo se na subscribe node
-		conn, err := grpc.NewClient(subNodeResponce.Node.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			fmt.Printf("Connection to node %s unsucsessful: %s\n", subNodeResponce.Node.Address, err)
-			// iz heada zbrišemo token
-			clientState.rpcHead.ExpireSubscription(subCtx, expireSubReq)
-			continue
-		}
-		rpc := pb.NewMessageBoardClient(conn)
-		err = testConnection(rpc, subCtx)
-		if err != nil {
-			conn.Close()
-			conn.Close()
-			fmt.Printf("Connection to node %s unsucsessful: %s\n", subNodeResponce.Node.Address, err)
-			// iz heada zbrišemo token
-			clientState.rpcHead.ExpireSubscription(subCtx, expireSubReq)
-			continue
-		}
-		fmt.Printf("Succsessfuly connected to node %s for subscription to topic %d\n", subNodeResponce.Node.Address, topicId)
-
-		// "registreramo" subscription na clientu
-		clientState.subscriptions[topicId] = Subscription{
-			connSub:   conn,
-			rpcSub:    rpc,
-			cancelSub: cancel,
-			token:     subNodeResponce.SubscribeToken,
-		}
-
-		// zahtevamo subscription za topic
-		topicReq := &pb.SubscribeTopicRequest{
-			TopicId:        []int64{topicId},
-			UserId:         clientState.user.Id,
-			SubscribeToken: subNodeResponce.SubscribeToken,
-		}
-
-		stream, err := clientState.subscriptions[topicId].rpcSub.SubscribeTopic(subCtx, topicReq)
-		if err != nil {
-			fmt.Printf("Error subscribing to topic %d: %s\n", topicId, err)
-			clientState.subscriptions[topicId].cancelSub()
-			delete(clientState.subscriptions, topicId)
-			continue
-		}
-
-		fmt.Printf("Subscribed to topic: %d\n", topicId)
-
-		// go rutina za vsak topic posebej
-		go func(tId int64, s pb.MessageBoard_SubscribeTopicClient) {
-			for {
-				event, err := s.Recv()
-				if err != nil {
-					fmt.Printf("\nSubscription to topic %d ended: ", tId)
-					fmt.Println(err)
-					fmt.Printf("> ")
-					return
-				}
-
-				opName := ""
-				switch event.Op {
-				case pb.OpType_OP_POST:
-					opName = "NEW"
-				case pb.OpType_OP_LIKE:
-					opName = "LIKE"
-				case pb.OpType_OP_UPDATE:
-					opName = "EDIT"
-				case pb.OpType_OP_DELETE:
-					opName = "DELETE"
-				}
-
-				fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
-					opName, event.Message.TopicId, event.Message.Id,
-					event.Message.Text, event.Message.Likes)
-			}
-		}(topicId, stream)
-	}
-}
-
-func unsubscribeHandler(clientState *ClientState, args []string) {
-	if len(args) == 0 {
-		fmt.Println("Usage: /unsubscribe <topic_id> [topic_id2] ...")
+	nodeResp, err := clientState.orchClient.GetSubscriptionNode(clientState.ctx, &pb.SubscriptionNodeRequest{
+		UserId:  clientState.user.Id,
+		TopicId: topicIds,
+	})
+	if err != nil {
+		fmt.Println("Error getting subscription node:", err)
 		return
 	}
 
-	var unsubscribedCount int
-	for _, arg := range args {
-		var topicId int64
-		_, err := fmt.Sscan(arg, &topicId)
-		if err != nil {
-			fmt.Println("Invalid topic_id:", arg)
-			continue
-		}
+	fmt.Printf("Assigned to node %s at %s\n", nodeResp.Node.NodeId, nodeResp.Node.Address)
 
-		subscription, exists := clientState.subscriptions[topicId]
-		if exists {
-			req := &pb.ExpireSubscriptionRequest{
-				Token:  clientState.subscriptions[topicId].token,
-				UserId: clientState.user.Id,
-			}
-			_, err := clientState.rpcHead.ExpireSubscription(clientState.ctx, req)
+	subConn, err := grpc.NewClient(nodeResp.Node.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Println("Error connecting to subscription node:", err)
+		return
+	}
+	clientState.subConn = subConn
+	subClient := pb.NewMessageBoardClient(subConn)
+
+	subCtx, subCancel := context.WithCancel(clientState.ctx)
+	clientState.subCancel = subCancel
+
+	stream, err := subClient.SubscribeTopic(subCtx, &pb.SubscribeTopicRequest{
+		TopicId:        topicIds,
+		UserId:         clientState.user.Id,
+		SubscribeToken: nodeResp.SubscribeToken,
+	})
+	if err != nil {
+		fmt.Println("Error subscribing:", err)
+		subCancel()
+		subConn.Close()
+		return
+	}
+
+	fmt.Println("Subscribed to topics:", topicIds)
+
+	go func() {
+		for {
+			event, err := stream.Recv()
 			if err != nil {
-				fmt.Printf("Error unsubscribing from topic %d: %s\n", topicId, err)
-				continue
+				if subCtx.Err() == context.Canceled {
+					return
+				}
+				fmt.Println("\nSubscription ended:", err)
+				return
 			}
-			subscription.cancelSub()
-			delete(clientState.subscriptions, topicId)
-			fmt.Printf("Unsubscribed from topic %d\n", topicId)
-			unsubscribedCount++
-		} else {
-			fmt.Printf("Not subscribed to topic %d\n", topicId)
-		}
-	}
 
-	if unsubscribedCount == 0 {
-		fmt.Println("Not subscribed to any of the specified topics")
+			opName := ""
+			switch event.Op {
+			case pb.OpType_OP_POST:
+				opName = "NEW"
+			case pb.OpType_OP_LIKE:
+				opName = "LIKE"
+			case pb.OpType_OP_UPDATE:
+				opName = "EDIT"
+			case pb.OpType_OP_DELETE:
+				opName = "DELETE"
+			}
+
+			fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
+				opName, event.Message.TopicId, event.Message.Id,
+				event.Message.Text, event.Message.Likes)
+		}
+	}()
+}
+
+func unsubscribeHandler(clientState *ClientState, args []string) {
+	if clientState.subCancel == nil {
+		fmt.Println("Not subscribed to anything")
+		return
 	}
+	clientState.subCancel()
+	clientState.subCancel = nil
+	if clientState.subConn != nil {
+		clientState.subConn.Close()
+		clientState.subConn = nil
+	}
+	fmt.Println("Unsubscribed")
 }
 
 // COMMANDS
@@ -454,7 +400,7 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 func connectToServer(orchestratorAddr string, username string) (*ClientState, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// 1. Connect to orchestrator
+	// connectas na orchestrator
 	orchConn, err := grpc.NewClient(orchestratorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		cancel()
@@ -462,7 +408,7 @@ func connectToServer(orchestratorAddr string, username string) (*ClientState, er
 	}
 	orchClient := pb.NewOrchestratorClient(orchConn)
 
-	// 2. Get cluster state (HEAD and TAIL addresses)
+	// dobis cluster state
 	clusterState, err := orchClient.GetClusterState(ctx, &emptypb.Empty{})
 	if err != nil {
 		cancel()
@@ -471,7 +417,7 @@ func connectToServer(orchestratorAddr string, username string) (*ClientState, er
 
 	fmt.Printf("Head: %s, Tail: %s\n", clusterState.Head.Address, clusterState.Tail.Address)
 
-	// 3. Connect to HEAD
+	// connectas na head
 	connHead, err := grpc.NewClient(clusterState.Head.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		cancel()
@@ -479,7 +425,7 @@ func connectToServer(orchestratorAddr string, username string) (*ClientState, er
 	}
 	clientHead := pb.NewMessageBoardClient(connHead)
 
-	// 4. Connect to TAIL
+	// connectas na tail
 	connTail, err := grpc.NewClient(clusterState.Tail.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		connHead.Close()
@@ -488,7 +434,7 @@ func connectToServer(orchestratorAddr string, username string) (*ClientState, er
 	}
 	clientTail := pb.NewMessageBoardClient(connTail)
 
-	// 5. Register user on HEAD
+	// registriras userja na head
 	user, err := clientHead.CreateUser(ctx, &pb.CreateUserRequest{Name: username})
 	if err != nil {
 		connHead.Close()
@@ -500,13 +446,14 @@ func connectToServer(orchestratorAddr string, username string) (*ClientState, er
 	fmt.Printf("Logged in as %s (id: %d)\n", user.Name, user.Id)
 
 	return &ClientState{
-		connHead: connHead,
-		rpcHead:  clientHead,
-		connTail: connTail,
-		rpcTail:  clientTail,
-		user:     user,
-		ctx:      ctx,
-		cancel:   cancel,
+		connHead:   connHead,
+		rpcHead:    clientHead,
+		connTail:   connTail,
+		rpcTail:    clientTail,
+		user:       user,
+		ctx:        ctx,
+		cancel:     cancel,
+		orchClient: orchClient,
 	}, nil
 }
 

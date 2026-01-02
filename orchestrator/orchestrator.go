@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -170,7 +172,6 @@ func (o *Orchestrator) monitorHealth() {
 }
 
 func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
-	// Find position in chain
 	idx := -1
 	for i, id := range o.chainOrder {
 		if id == deadNodeId {
@@ -182,7 +183,6 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 		return
 	}
 
-	// Get neighbors
 	var prevId, nextId string
 	if idx > 0 {
 		prevId = o.chainOrder[idx-1]
@@ -191,13 +191,11 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 		nextId = o.chainOrder[idx+1]
 	}
 
-	// Remove from chain
 	o.chainOrder = append(o.chainOrder[:idx], o.chainOrder[idx+1:]...)
 	delete(o.nodes, deadNodeId)
 	delete(o.nodeHealth, deadNodeId)
 	delete(o.nodeSubs, deadNodeId)
 
-	// Reconnect neighbors
 	if prevId != "" && nextId != "" {
 		o.nodes[prevId].NextAddress = o.nodes[nextId].Address
 		o.nodes[prevId].Reconfigure = true
@@ -205,11 +203,55 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 		o.nodes[nextId].Reconfigure = true
 	}
 
-	// Update roles if HEAD or TAIL died
 	if len(o.chainOrder) > 0 {
 		o.nodes[o.chainOrder[0]].Role = "head"
 		o.nodes[o.chainOrder[len(o.chainOrder)-1]].Role = "tail"
 	}
 
 	fmt.Printf("Chain reconfigured after %s failure\n", deadNodeId)
+}
+
+func (o *Orchestrator) GetSubscriptionNode(ctx context.Context, req *pb.SubscriptionNodeRequest) (*pb.SubscriptionNodeResponse, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	var best string
+	lo := int32(math.MaxInt32)
+
+	for id, subs := range o.nodeSubs {
+		if subs < lo {
+			best = id
+			lo = subs
+		}
+	}
+
+	if best == "" {
+		return nil, fmt.Errorf("no nodes available")
+	}
+
+	node := o.nodes[best]
+
+	token := o.generateToken()
+
+	fmt.Printf("Subscription assigned to %s (%s), token: %s\n", best, node.Address, token)
+
+	return &pb.SubscriptionNodeResponse{
+		SubscribeToken: token,
+		Node: &pb.NodeInfo{
+			NodeId:  best,
+			Address: node.Address,
+		},
+	}, nil
+
+}
+
+// copy paste iz serverja
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func (o *Orchestrator) generateToken() string {
+	b := make([]rune, 16)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }

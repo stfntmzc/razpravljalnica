@@ -718,9 +718,10 @@ var ControlPlane_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	Orchestrator_RegisterNode_FullMethodName    = "/razpravljalnica.Orchestrator/RegisterNode"
-	Orchestrator_Heartbeat_FullMethodName       = "/razpravljalnica.Orchestrator/Heartbeat"
-	Orchestrator_GetClusterState_FullMethodName = "/razpravljalnica.Orchestrator/GetClusterState"
+	Orchestrator_RegisterNode_FullMethodName        = "/razpravljalnica.Orchestrator/RegisterNode"
+	Orchestrator_Heartbeat_FullMethodName           = "/razpravljalnica.Orchestrator/Heartbeat"
+	Orchestrator_GetClusterState_FullMethodName     = "/razpravljalnica.Orchestrator/GetClusterState"
+	Orchestrator_GetSubscriptionNode_FullMethodName = "/razpravljalnica.Orchestrator/GetSubscriptionNode"
 )
 
 // OrchestratorClient is the client API for Orchestrator service.
@@ -730,6 +731,7 @@ type OrchestratorClient interface {
 	RegisterNode(ctx context.Context, in *RegisterNodeRequest, opts ...grpc.CallOption) (*RegisterNodeResponse, error)
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	GetClusterState(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetClusterStateResponse, error)
+	GetSubscriptionNode(ctx context.Context, in *SubscriptionNodeRequest, opts ...grpc.CallOption) (*SubscriptionNodeResponse, error)
 }
 
 type orchestratorClient struct {
@@ -770,6 +772,16 @@ func (c *orchestratorClient) GetClusterState(ctx context.Context, in *emptypb.Em
 	return out, nil
 }
 
+func (c *orchestratorClient) GetSubscriptionNode(ctx context.Context, in *SubscriptionNodeRequest, opts ...grpc.CallOption) (*SubscriptionNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubscriptionNodeResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_GetSubscriptionNode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrchestratorServer is the server API for Orchestrator service.
 // All implementations must embed UnimplementedOrchestratorServer
 // for forward compatibility.
@@ -777,6 +789,7 @@ type OrchestratorServer interface {
 	RegisterNode(context.Context, *RegisterNodeRequest) (*RegisterNodeResponse, error)
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	GetClusterState(context.Context, *emptypb.Empty) (*GetClusterStateResponse, error)
+	GetSubscriptionNode(context.Context, *SubscriptionNodeRequest) (*SubscriptionNodeResponse, error)
 	mustEmbedUnimplementedOrchestratorServer()
 }
 
@@ -795,6 +808,9 @@ func (UnimplementedOrchestratorServer) Heartbeat(context.Context, *HeartbeatRequ
 }
 func (UnimplementedOrchestratorServer) GetClusterState(context.Context, *emptypb.Empty) (*GetClusterStateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetClusterState not implemented")
+}
+func (UnimplementedOrchestratorServer) GetSubscriptionNode(context.Context, *SubscriptionNodeRequest) (*SubscriptionNodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSubscriptionNode not implemented")
 }
 func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
 func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
@@ -871,6 +887,24 @@ func _Orchestrator_GetClusterState_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Orchestrator_GetSubscriptionNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscriptionNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).GetSubscriptionNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_GetSubscriptionNode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).GetSubscriptionNode(ctx, req.(*SubscriptionNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Orchestrator_ServiceDesc is the grpc.ServiceDesc for Orchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -889,6 +923,10 @@ var Orchestrator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetClusterState",
 			Handler:    _Orchestrator_GetClusterState_Handler,
+		},
+		{
+			MethodName: "GetSubscriptionNode",
+			Handler:    _Orchestrator_GetSubscriptionNode_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
