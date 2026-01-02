@@ -655,6 +655,8 @@ func (server *MessageBoardServer) heartbeatLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 
 	for range ticker.C {
+		// DEBUG: fmt.Println("Sending heartbeat...")
+
 		server.subscribersMu.RLock()
 		subCount := int32(0)
 
@@ -664,7 +666,7 @@ func (server *MessageBoardServer) heartbeatLoop() {
 		server.subscribersMu.RUnlock()
 
 		resp, err := server.orchClient.Heartbeat(context.Background(), &pb.HeartbeatRequest{
-			NodeId:          server.nodeId,
+			NodeId:          server.id,
 			SubscriberCount: subCount,
 		})
 

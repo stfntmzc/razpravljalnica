@@ -104,6 +104,8 @@ func (o *Orchestrator) RegisterNode(ctx context.Context, req *pb.RegisterNodeReq
 }
 
 func (o *Orchestrator) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	// DEBUG: fmt.Printf("Heartbeat received from: %s\n", req.NodeId)
+
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
