@@ -26,13 +26,24 @@ type ClientState struct {
 	User          *pb.User
 	ctx           context.Context
 	cancel        context.CancelFunc
-	subscriptions map[int64]Subscription // topic id -> subscription
+	Subscriptions map[int64]Subscription // topic id -> subscription
 }
 type Subscription struct {
 	connSub   *grpc.ClientConn
 	rpcSub    pb.MessageBoardClient
 	cancelSub context.CancelFunc
 	token     string
+}
+
+// za ui
+type UiSubscriptionEventItem struct {
+	Username  string
+	UserId    int64
+	Id        int64
+	Timestamp *timestamppb.Timestamp
+	Likes     int64
+	OpType    string
+	Text      []string // array stringov širine messageItemWidth
 }
 
 // mapa komand
@@ -441,7 +452,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 	// Za vsak topik naredimo ločeno subscription
 	for _, topicId := range topicIds {
 		// Če je že subscribed, preskočimo
-		if _, exists := clientState.subscriptions[topicId]; exists {
+		if _, exists := clientState.Subscriptions[topicId]; exists {
 			fmt.Printf("Already subscribed to topic with id %d\n", topicId)
 			continue
 		}
@@ -488,7 +499,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		fmt.Printf("Succsessfuly connected to node %s for subscription to topic %d\n", subNodeResponce.Node.Address, topicId)
 
 		// "registreramo" subscription na clientu
-		clientState.subscriptions[topicId] = Subscription{
+		clientState.Subscriptions[topicId] = Subscription{
 			connSub:   conn,
 			rpcSub:    rpc,
 			cancelSub: cancel,
@@ -502,11 +513,11 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 			SubscribeToken: subNodeResponce.SubscribeToken,
 		}
 
-		stream, err := clientState.subscriptions[topicId].rpcSub.SubscribeTopic(subCtx, topicReq)
+		stream, err := clientState.Subscriptions[topicId].rpcSub.SubscribeTopic(subCtx, topicReq)
 		if err != nil {
 			fmt.Printf("Error subscribing to topic %d: %s\n", topicId, err)
-			clientState.subscriptions[topicId].cancelSub()
-			delete(clientState.subscriptions, topicId)
+			clientState.Subscriptions[topicId].cancelSub()
+			delete(clientState.Subscriptions, topicId)
 			continue
 		}
 
@@ -558,10 +569,10 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 			continue
 		}
 
-		subscription, exists := clientState.subscriptions[topicId]
+		subscription, exists := clientState.Subscriptions[topicId]
 		if exists {
 			req := &pb.ExpireSubscriptionRequest{
-				Token:  clientState.subscriptions[topicId].token,
+				Token:  clientState.Subscriptions[topicId].token,
 				UserId: clientState.User.Id,
 			}
 			_, err := clientState.rpcHead.ExpireSubscription(clientState.ctx, req)
@@ -570,7 +581,7 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 				continue
 			}
 			subscription.cancelSub()
-			delete(clientState.subscriptions, topicId)
+			delete(clientState.Subscriptions, topicId)
 			fmt.Printf("Unsubscribed from topic %d\n", topicId)
 			unsubscribedCount++
 		} else {
@@ -638,7 +649,7 @@ func connectToServer(username string, urlHead string, urlTail string) (*ClientSt
 		User:          user,
 		ctx:           ctx,
 		cancel:        cancel,
-		subscriptions: make(map[int64]Subscription),
+		Subscriptions: make(map[int64]Subscription),
 	}, nil
 }
 

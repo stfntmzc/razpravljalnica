@@ -742,6 +742,8 @@ func getContentString(m model) string {
 		} else {
 			s += getTopicsString(m)
 		}
+	} else if m.tabs[m.openTabIndex] == "Live chat" {
+		s += getLiveChatView(m)
 	}
 
 	return s
@@ -749,6 +751,28 @@ func getContentString(m model) string {
 
 func getTabsPadding(m model) string {
 	return getFillWithString(m, tabsPadding, " ")
+}
+
+func getLiveChatView(m model) string {
+	s := ""
+
+	if len(m.client.clientState.Subscriptions) == 0 {
+		noSubscriptionstext := "You are not subscribed to any topics."
+		s += gatMarginLeftString(m) + verticalLineChar + getContnetPaddingSidesString(m) + noSubscriptionstext
+		s += getFillWithString(m, contentWidth-(runewidth.StringWidth(noSubscriptionstext)+contnetPadddingSides), " ")
+		s += verticalLineChar + "\n"
+		for i := contnetPadddingTopBottom * 2; i < contentHeight; i++ {
+			s += gatMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+		}
+		// footer
+		s += gatMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
+		s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+		legendString := "q - quit"
+		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
+		s += gatMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
+	}
+
+	return s
 }
 
 func getTopicsString(m model) string {
