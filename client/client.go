@@ -224,6 +224,20 @@ func editHandler(clientState *ClientState, args []string) {
 	fmt.Printf("Message updated: Text=%s, Id=%d\n", message.Text, message.Id)
 }
 
+// za ui
+func EditMessage(clientState *ClientState, messageId int, text string) error {
+	req := &pb.UpdateMessageRequest{
+		MessageId: int64(messageId),
+		Text:      text,
+		UserId:    clientState.User.Id,
+	}
+	_, err := clientState.rpcHead.UpdateMessage(clientState.ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func delHandler(clientState *ClientState, args []string) {
 	if len(args) == 0 {
 		fmt.Println("Usage: /del <message_id>")

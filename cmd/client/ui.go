@@ -117,7 +117,7 @@ type createTopicMsg struct {
 }
 
 type likeMessageMsg struct {
-	messageID int
+	messageId int
 	err       error
 }
 
@@ -281,7 +281,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.postNewMessageMode = false
 					m.postNewMessageInput.SetValue("")
 					m.postNewMessageInput.Blur()
-					m.messagesStartIndex -= newMessageInputHeight
+					m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
 					return m, nil
 				case "enter":
 					text := m.postNewMessageInput.Value()
@@ -297,8 +297,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.postNewMessageMode = false
 						m.postNewMessageInput.SetValue("")
 						m.postNewMessageInput.Blur()
-						m.messagesStartIndex -= newMessageInputHeight
+						m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
 						return m, postNewMessageCmd(m, limitedText)
+					}
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.postNewMessageInput, cmd = m.postNewMessageInput.Update(msg)
+				return m, cmd
+			} else if m.editMessageMode {
+				// editamp message
+				switch msg.String() {
+				case "esc":
+					m.editMessageMode = false
+					m.postNewMessageInput.SetValue("")
+					m.postNewMessageInput.Blur()
+					m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
+					return m, nil
+				case "enter":
+					text := m.postNewMessageInput.Value()
+
+					wrapped := wrapText(text, messageItemWidth)
+					// damo stran vrstice, ki jih je preveč
+					if len(wrapped) > newMessageInputHeight+1 {
+						wrapped = wrapped[:newMessageInputHeight+1]
+					}
+					// združimo nazaj
+					limitedText := strings.Join(wrapped, " ")
+					if limitedText != "" {
+						m.editMessageMode = false
+						m.postNewMessageInput.SetValue("")
+						m.postNewMessageInput.Blur()
+						m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
+						messageId := getSelectedMessageId(m)
+						return m, editMessageCmd(m, messageId, limitedText)
 					}
 					return m, nil
 				}
@@ -350,8 +382,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "l":
 					messageId := getSelectedMessageId(m)
 					return m, likeMessageCmd(m, messageId)
-				/*case "e":
-				messageId := getSelectedMessageId(m)*/
+				case "e":
+					messageId := getSelectedMessageId(m)
+					if m.client.clientState.User.Id != m.messages[int64(messageId)].UserId {
+						// ne moreš editat message ki ni tvoj
+						m.editMessageMode = false
+						return m, nil
+					}
+					m.messagesStartIndex += newMessageInputHeight
+					// uporabmo isti input kt za nov message
+					m.postNewMessageInput.Focus()
+					m.editMessageMode = true
+					//return m, editMessageCmd(m, messageId, m.postNewMessageInput.Value())
+					return m, nil
 				case "p":
 					// postamo nov message
 					m.messagesStartIndex += newMessageInputHeight
@@ -420,7 +463,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// TODO
 					}
 				case "m":
-					if m.tabs[m.openTabIndex] == "Topics" {
+					if m.tabs[m.openTabIndex] == "Topics" && m.cursorIndexes[m.openTabIndex] >= 0 {
 						ids := make([]int64, 0, len(m.topics))
 						for id := range m.topics {
 							ids = append(ids, id)
@@ -492,9 +535,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.err != nil {
 				return m, nil
 			}
-			message := m.messages[int64(msg.messageID)]
+			message := m.messages[int64(msg.messageId)]
 			message.Likes++
-			m.messages[int64(msg.messageID)] = message
+			m.messages[int64(msg.messageId)] = message
 			return m, nil
 		case postNewMessageMsg:
 			if msg.err != nil {
@@ -764,13 +807,16 @@ func getOpenTopicString(m model) string {
 	// footer
 	s += gatMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
 
-	if m.postNewMessageMode {
-		// delamo nov message
+	if m.postNewMessageMode || m.editMessageMode {
+		// delamo nov message ali pa editamo nek message
 		wrappedInput := wrapText(m.postNewMessageInput.Value(), messageItemWidth)
 		if len(wrappedInput) == 0 {
 			wrappedInput = []string{""}
 		}
 		prefix := "New message: "
+		if m.editMessageMode {
+			prefix = "Edit message: "
+		}
 		for i := 0; i < newMessageInputHeight+1; i++ {
 			s += gatMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 			var line string
@@ -986,12 +1032,23 @@ func createTopicCmd(m model, name string) tea.Cmd {
 	}
 }
 
-func likeMessageCmd(m model, messageID int) tea.Cmd {
+func likeMessageCmd(m model, messageId int) tea.Cmd {
 	return func() tea.Msg {
-		err := client.LikeMessage(m.client.clientState, int64(messageID), int(m.openTopicId))
+		err := client.LikeMessage(m.client.clientState, int64(messageId), int(m.openTopicId))
 		return likeMessageMsg{
-			messageID: messageID,
+			messageId: messageId,
 			err:       err,
+		}
+	}
+}
+
+func editMessageCmd(m model, messageId int, text string) tea.Cmd {
+	return func() tea.Msg {
+		err := client.EditMessage(m.client.clientState, messageId, text)
+		msg := m.messages[int64(messageId)]
+		return postNewMessageMsg{
+			message: &msg,
+			err:     err,
 		}
 	}
 }

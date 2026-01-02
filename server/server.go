@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	pb "razpravljalnica/proto"
+	"strings"
 	"time"
 
 	"slices"
@@ -328,6 +329,10 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
 
+	if server.messages[req.MessageId].UserId != req.UserId {
+		return nil, fmt.Errorf("can't edit message you didn't post")
+	}
+
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.UpdateMessage(ctx, req)
 
@@ -343,7 +348,7 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 	if msg == nil {
 		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
 	}
-	oldText := msg.Text
+	oldText := strings.Join(strings.Fields(msg.Text), " ")
 	server.messages[req.MessageId].Text = req.Text
 	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
 
