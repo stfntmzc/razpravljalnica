@@ -379,6 +379,10 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 
 func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeMessageRequest) (*pb.Message, error) {
 
+	if server.messages[req.MessageId].UserId == req.UserId {
+		return nil, fmt.Errorf("can't like yout own message")
+	}
+
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.LikeMessage(ctx, req)
 

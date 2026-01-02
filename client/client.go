@@ -275,10 +275,11 @@ func likeHandler(clientState *ClientState, args []string) {
 }
 
 // za ui
-func LikeMessage(clientState *ClientState, messageId int64) error {
+func LikeMessage(clientState *ClientState, messageId int64, topicId int) error {
 	req := &pb.LikeMessageRequest{
 		MessageId: messageId,
 		UserId:    clientState.User.Id,
+		TopicId:   int64(topicId),
 	}
 	//fmt.Printf("%d", messageId)
 	_, err := clientState.rpcHead.LikeMessage(clientState.ctx, req)

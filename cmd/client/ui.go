@@ -82,6 +82,7 @@ type model struct {
 	messagesEndIndex    int
 	postNewMessageMode  bool
 	postNewMessageInput textinput.Model
+	editMessageMode     bool
 
 	// client
 	client connectResultMsg
@@ -185,6 +186,7 @@ func initialModel() model {
 		messages:            messages,
 		postNewMessageMode:  false,
 		postNewMessageInput: postNewMessageInput,
+		editMessageMode:     false,
 	}
 }
 
@@ -304,7 +306,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.postNewMessageInput, cmd = m.postNewMessageInput.Update(msg)
 				return m, cmd
 			} else if m.openTopicId != -1 {
-				// beremo sporočil nekega topica
+				// beremo sporočila nekega topica
 				switch msg.String() {
 				case "b":
 					m.openTopicId = -1
@@ -348,6 +350,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "l":
 					messageId := getSelectedMessageId(m)
 					return m, likeMessageCmd(m, messageId)
+				/*case "e":
+				messageId := getSelectedMessageId(m)*/
 				case "p":
 					// postamo nov message
 					m.messagesStartIndex += newMessageInputHeight
@@ -984,7 +988,7 @@ func createTopicCmd(m model, name string) tea.Cmd {
 
 func likeMessageCmd(m model, messageID int) tea.Cmd {
 	return func() tea.Msg {
-		err := client.LikeMessage(m.client.clientState, int64(messageID))
+		err := client.LikeMessage(m.client.clientState, int64(messageID), int(m.openTopicId))
 		return likeMessageMsg{
 			messageID: messageID,
 			err:       err,
