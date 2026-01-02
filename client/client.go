@@ -324,8 +324,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		// dobimo subscription node
 		subNodeResponce, err := clientState.rpcHead.GetSubscriptionNode(subCtx, nodeReq)
 		if err != nil {
-			fmt.Printf("Getting subscription node %s unsucsessful: %s", subNodeResponce.Node.Address, err)
-			fmt.Println()
+			fmt.Printf("Getting subscription node unsucsessful: %s\n", err)
 			continue
 		}
 		// za vsak slučaj, če kaj faila, da pošljemo expire request

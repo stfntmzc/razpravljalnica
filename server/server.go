@@ -471,6 +471,12 @@ func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *
 	if !server.isHead {
 		return nil, fmt.Errorf("can't request subscription node from non-head node")
 	}
+	// preverimo če topic obstaja
+	_, ok := server.topics[req.TopicId[0]]
+	if !ok {
+		return nil, fmt.Errorf("topic with id %d doesn't exist", req.TopicId[0])
+	}
+
 	nodeId, ok := server.getLeastSubscribersNodeId()
 	if !ok {
 		return nil, fmt.Errorf("no nodes available")
