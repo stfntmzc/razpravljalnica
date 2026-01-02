@@ -121,6 +121,11 @@ type likeMessageMsg struct {
 	err       error
 }
 
+type deleteMessageMsg struct {
+	messageId int
+	err       error
+}
+
 type postNewMessageMsg struct {
 	message *client.UiMessageItem
 	err     error
@@ -381,6 +386,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				case "l":
 					messageId := getSelectedMessageId(m)
+					if m.client.clientState.User.Id == m.messages[int64(messageId)].UserId {
+						// ne moreš likeat sam svoj message
+						return m, nil
+					}
 					return m, likeMessageCmd(m, messageId)
 				case "e":
 					messageId := getSelectedMessageId(m)
@@ -395,6 +404,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.editMessageMode = true
 					//return m, editMessageCmd(m, messageId, m.postNewMessageInput.Value())
 					return m, nil
+				case "d":
+					messageId := getSelectedMessageId(m)
+					if m.client.clientState.User.Id != m.messages[int64(messageId)].UserId {
+						// ne moreš brisat tujih sporočil
+						return m, nil
+					}
+					return m, deleteMessageCmd(m, messageId)
 				case "p":
 					// postamo nov message
 					m.messagesStartIndex += newMessageInputHeight
@@ -544,6 +560,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			//m.messages[msg.message.Id] = *msg.message
+			return m, listMessagesCmd(m)
+		case deleteMessageMsg:
+			if msg.err != nil {
+				return m, nil
+			}
+			delete(m.messages, int64(msg.messageId))
+			// popravimo cursor, da ne kaže izven
+			m.cursorMessagesIndex = max(0, m.cursorMessagesIndex-1)
+			// ponovno listamo messages
 			return m, listMessagesCmd(m)
 		}
 		var cmd tea.Cmd
@@ -1036,6 +1061,16 @@ func likeMessageCmd(m model, messageId int) tea.Cmd {
 	return func() tea.Msg {
 		err := client.LikeMessage(m.client.clientState, int64(messageId), int(m.openTopicId))
 		return likeMessageMsg{
+			messageId: messageId,
+			err:       err,
+		}
+	}
+}
+
+func deleteMessageCmd(m model, messageId int) tea.Cmd {
+	return func() tea.Msg {
+		err := client.DeleteMessage(m.client.clientState, int64(messageId), int(m.openTopicId))
+		return deleteMessageMsg{
 			messageId: messageId,
 			err:       err,
 		}

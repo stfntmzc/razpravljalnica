@@ -303,6 +303,21 @@ func LikeMessage(clientState *ClientState, messageId int64, topicId int) error {
 	return nil
 }
 
+// za ui
+func DeleteMessage(clientState *ClientState, messageId int64, topicId int) error {
+	req := &pb.DeleteMessageRequest{
+		MessageId: messageId,
+		UserId:    clientState.User.Id,
+		TopicId:   int64(topicId),
+	}
+	//fmt.Printf("%d", messageId)
+	_, err := clientState.rpcHead.DeleteMessage(clientState.ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func listTopicsHandler(clientState *ClientState, args []string) {
 	response, err := clientState.rpcTail.ListTopics(clientState.ctx, &emptypb.Empty{})
 	if err != nil {
