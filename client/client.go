@@ -5,8 +5,10 @@
 package client
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	pb "razpravljalnica/proto"
 	"strings"
 	"time"
@@ -53,7 +55,7 @@ type UiSubscriptionEventItem struct {
 // mapa komand
 var commands = map[string]CommandHandler{}
 
-func Client(username string, urlHead string, urlTail string) (*ClientState, error) {
+func ClientUi(username string, urlHead string, urlTail string) (*ClientState, error) {
 
 	// inicializacija mape komand
 	initCommandHandlers()
@@ -63,17 +65,32 @@ func Client(username string, urlHead string, urlTail string) (*ClientState, erro
 	if err != nil {
 		panic(err)
 	}
-	//defer clientState.connHead.Close()
-	//defer clientState.connTail.Close()
-	//fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
 
 	return clientState, nil
+}
+
+func Client(username string, urlHead string, urlTail string) {
+
+	// inicializacija mape komand
+	initCommandHandlers()
+
+	// povežemo se na strežnik
+	clientState, err := connectToServer(username, urlHead, urlTail)
+	if err != nil {
+		panic(err)
+	}
+	defer clientState.connHead.Close()
+	defer clientState.connTail.Close()
+	fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
+	fmt.Printf("Username=%s, UserId=%d\n", username, clientState.User.Id)
+
+	//return clientState, nil
 
 	// main loop
-	/*scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		select {
-		case <-clientState.ctx.Done():
+		case <-clientState.Ctx.Done():
 			fmt.Println("Client exiting...")
 			return
 		default:
@@ -88,7 +105,7 @@ func Client(username string, urlHead string, urlTail string) (*ClientState, erro
 			//fmt.Println("ukaz:", line)
 			handleInput(clientState, line)
 		}
-	}*/
+	}
 }
 
 func initCommandHandlers() {
@@ -426,7 +443,7 @@ func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageI
 			UserId:    msg.UserId,
 			RequestBy: clientState.User.Id,
 		}
-		user, err := clientState.rpcHead.GetUser(clientState.Ctx, getUserReq)
+		user, err := clientState.rpcTail.GetUser(clientState.Ctx, getUserReq)
 		if err != nil {
 			continue
 		}

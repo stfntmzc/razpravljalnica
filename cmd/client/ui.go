@@ -1476,7 +1476,7 @@ func buildContentMessages(m model, messages []client.UiMessageItem) ([]string, m
 
 func connectCmd(username string, head string, tail string) tea.Cmd {
 	return func() tea.Msg {
-		c, err := client.Client(username, head, tail)
+		c, err := client.ClientUi(username, head, tail)
 		return connectResultMsg{
 			clientState: c,
 			err:         err,
