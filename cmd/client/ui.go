@@ -855,7 +855,7 @@ func getLiveChatView(m model) string {
 		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 	} else {
 		s += getSubscribeItemsString(m)
-		renderedLines := m.contentEndIndexes[1] + m.contentStartIndexes[1] + 1 + contnetPadddingTopBottom
+		renderedLines := (m.contentEndIndexes[1] - m.contentStartIndexes[1] + 1) + contnetPadddingTopBottom
 		// zapolnemo, če je prazno
 		for renderedLines < contentHeight {
 			emptyLine := getMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar
@@ -863,6 +863,7 @@ func getLiveChatView(m model) string {
 			renderedLines++
 		}
 		// footer
+		//s += getContnetPaddingTopBottomString(m)
 		s += getMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
 		s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 		legendString := "p - post new message on selected topic " + verticalLineChar + " q - quit"
@@ -1069,7 +1070,7 @@ func getOpenTopicString(m model) string {
 	s += legendString + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
 	currLineIndex++
 	for i := 0; i < messageItemMarginBottom; i++ {
-		s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar + "\n"
+		s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getFillWithString(m, contentWidth, horizontalLineChar) + verticalLineChar + "\n"
 		currLineIndex++
 	}
 
