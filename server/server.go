@@ -539,18 +539,12 @@ func (server *MessageBoardServer) getLeastSubscribersNodeId() (string, bool) {
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
 
 	// preverimo token
-	tokenVerificationReq := &pb.VerifyTokenRequest{
+	tokenResp, err := server.orchClient.VerifyToken(context.Background(), &pb.VerifyTokenRequest{
 		Token:  req.SubscribeToken,
 		UserId: req.UserId,
-	}
-	tokenVerification, err := server.nodePrev.rpc.VerifyToken(context.Background(), tokenVerificationReq)
-	if err != nil {
-		fmt.Printf("SUBSCRIBE UNSUCCSESSFUL (ERROR): userId=%d\n", req.UserId)
-		return err
-	}
-	if !tokenVerification.Valid {
-		fmt.Printf("SUBSCRIBE UNSUCCSESSFUL: userId=%d\n", req.UserId)
-		return fmt.Errorf("Invalid token")
+	})
+	if err != nil || !tokenResp.Valid {
+		return fmt.Errorf("invalid token")
 	}
 
 	// token je ok, nadaljujemo

@@ -27,27 +27,33 @@ type NodeInfo struct {
 type Orchestrator struct {
 	pb.UnimplementedOrchestratorServer
 
-	mu         sync.RWMutex
-	nodes      map[string]*NodeInfo // nodeId -> info
-	chainOrder []string             // ordered list of node IDs
-	nodeHealth map[string]time.Time // nodeId -> last heartbeat
-	nodeSubs   map[string]int32     // nodeId -> subscriber count
+	mu          sync.RWMutex
+	nodes       map[string]*NodeInfo
+	chainOrder  []string
+	nodeHealth  map[string]time.Time
+	nodeSubs    map[string]int32
+	validTokens map[string]*TokenInfo
+}
+
+type TokenInfo struct {
+	UserId   int64
+	TopicIds []int64
+	NodeId   string
 }
 
 func NewOrchestrator() *Orchestrator {
 	return &Orchestrator{
-		nodes:      make(map[string]*NodeInfo),
-		chainOrder: []string{},
-		nodeHealth: make(map[string]time.Time),
-		nodeSubs:   make(map[string]int32),
+		nodes:       make(map[string]*NodeInfo),
+		chainOrder:  []string{},
+		nodeHealth:  make(map[string]time.Time),
+		nodeSubs:    make(map[string]int32),
+		validTokens: make(map[string]*TokenInfo),
 	}
 }
 
 func (o *Orchestrator) Start(address string) {
-	// Start health monitor
 	go o.monitorHealth()
 
-	// Start gRPC server
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		panic(err)
@@ -233,6 +239,12 @@ func (o *Orchestrator) GetSubscriptionNode(ctx context.Context, req *pb.Subscrip
 
 	token := o.generateToken()
 
+	o.validTokens[token] = &TokenInfo{
+		UserId:   req.UserId,
+		TopicIds: req.TopicId,
+		NodeId:   bestNodeId,
+	}
+
 	fmt.Printf("Subscription assigned to %s (%s), token: %s\n", best, node.Address, token)
 
 	return &pb.SubscriptionNodeResponse{
@@ -254,4 +266,16 @@ func (o *Orchestrator) generateToken() string {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
 	return string(b)
+}
+
+func (o *Orchestrator) VerifyToken(ctx context.Context, req *pb.VerifyTokenRequest) (*pb.VerifyTokenResponse, error) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	tokenInfo, ok := o.validTokens[req.Token]
+	if !ok || tokenInfo.UserId != req.UserId {
+		return &pb.VerifyTokenResponse{Valid: false}, nil
+	}
+
+	return &pb.VerifyTokenResponse{Valid: true}, nil
 }

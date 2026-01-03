@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             v6.33.2
-// source: proto/razpravljalnica.proto
+// source: razpravljalnica.proto
 
 package razpravljalnica
 
@@ -608,7 +608,7 @@ var MessageBoard_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/razpravljalnica.proto",
+	Metadata: "razpravljalnica.proto",
 }
 
 const (
@@ -714,7 +714,7 @@ var ControlPlane_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/razpravljalnica.proto",
+	Metadata: "razpravljalnica.proto",
 }
 
 const (
@@ -722,6 +722,7 @@ const (
 	Orchestrator_Heartbeat_FullMethodName           = "/razpravljalnica.Orchestrator/Heartbeat"
 	Orchestrator_GetClusterState_FullMethodName     = "/razpravljalnica.Orchestrator/GetClusterState"
 	Orchestrator_GetSubscriptionNode_FullMethodName = "/razpravljalnica.Orchestrator/GetSubscriptionNode"
+	Orchestrator_VerifyToken_FullMethodName         = "/razpravljalnica.Orchestrator/VerifyToken"
 )
 
 // OrchestratorClient is the client API for Orchestrator service.
@@ -732,6 +733,7 @@ type OrchestratorClient interface {
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	GetClusterState(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetClusterStateResponse, error)
 	GetSubscriptionNode(ctx context.Context, in *SubscriptionNodeRequest, opts ...grpc.CallOption) (*SubscriptionNodeResponse, error)
+	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
 }
 
 type orchestratorClient struct {
@@ -782,6 +784,16 @@ func (c *orchestratorClient) GetSubscriptionNode(ctx context.Context, in *Subscr
 	return out, nil
 }
 
+func (c *orchestratorClient) VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyTokenResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_VerifyToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrchestratorServer is the server API for Orchestrator service.
 // All implementations must embed UnimplementedOrchestratorServer
 // for forward compatibility.
@@ -790,6 +802,7 @@ type OrchestratorServer interface {
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	GetClusterState(context.Context, *emptypb.Empty) (*GetClusterStateResponse, error)
 	GetSubscriptionNode(context.Context, *SubscriptionNodeRequest) (*SubscriptionNodeResponse, error)
+	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
 	mustEmbedUnimplementedOrchestratorServer()
 }
 
@@ -811,6 +824,9 @@ func (UnimplementedOrchestratorServer) GetClusterState(context.Context, *emptypb
 }
 func (UnimplementedOrchestratorServer) GetSubscriptionNode(context.Context, *SubscriptionNodeRequest) (*SubscriptionNodeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSubscriptionNode not implemented")
+}
+func (UnimplementedOrchestratorServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method VerifyToken not implemented")
 }
 func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
 func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
@@ -905,6 +921,24 @@ func _Orchestrator_GetSubscriptionNode_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Orchestrator_VerifyToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).VerifyToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_VerifyToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).VerifyToken(ctx, req.(*VerifyTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Orchestrator_ServiceDesc is the grpc.ServiceDesc for Orchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -928,7 +962,11 @@ var Orchestrator_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetSubscriptionNode",
 			Handler:    _Orchestrator_GetSubscriptionNode_Handler,
 		},
+		{
+			MethodName: "VerifyToken",
+			Handler:    _Orchestrator_VerifyToken_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/razpravljalnica.proto",
+	Metadata: "razpravljalnica.proto",
 }
