@@ -291,6 +291,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.postNewMessageInput.SetValue("")
 					m.postNewMessageInput.Blur()
 					m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
+					m.contentStartIndexes[m.openTabIndex] = max(0, m.contentStartIndexes[m.openTabIndex]-newMessageInputHeight)
 					return m, nil
 				case "enter":
 					text := m.postNewMessageInput.Value()
@@ -307,7 +308,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.postNewMessageInput.SetValue("")
 						m.postNewMessageInput.Blur()
 						m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
-						return m, postNewMessageCmd(m, limitedText)
+						m.contentStartIndexes[m.openTabIndex] = max(0, m.contentStartIndexes[m.openTabIndex]-newMessageInputHeight)
+
+						if m.tabs[m.openTabIndex] == "Live chat" {
+							itemIndex := getSelectedSubscriptionItemIndex(m)
+							if itemIndex == -1 {
+								return m, nil
+							}
+							topicId := m.subscribeItems[itemIndex].TopicId
+							//fmt.Printf("%d", topicId)
+							return m, postNewMessageCmd(m, limitedText, int(topicId))
+						} else {
+							return m, postNewMessageCmd(m, limitedText, int(m.openTopicId))
+						}
+
 					}
 					return m, nil
 				}
@@ -322,6 +336,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.postNewMessageInput.SetValue("")
 					m.postNewMessageInput.Blur()
 					m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
+					m.contentStartIndexes[m.openTabIndex] = max(0, m.contentStartIndexes[m.openTabIndex]-newMessageInputHeight)
 					return m, nil
 				case "enter":
 					text := m.postNewMessageInput.Value()
@@ -338,8 +353,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.postNewMessageInput.SetValue("")
 						m.postNewMessageInput.Blur()
 						m.messagesStartIndex = max(0, m.messagesStartIndex-newMessageInputHeight)
-						messageId := getSelectedMessageId(m)
-						return m, editMessageCmd(m, messageId, limitedText)
+						m.contentStartIndexes[m.openTabIndex] = max(0, m.contentStartIndexes[m.openTabIndex]-newMessageInputHeight)
+
+						if m.tabs[m.openTabIndex] == "Live chat" {
+							itemIndex := getSelectedSubscriptionItemIndex(m)
+							if itemIndex == -1 {
+								return m, nil
+							}
+							messageId := m.subscribeItems[itemIndex].MessageId
+							//fmt.Printf("%d", topicId)
+							return m, editMessageCmd(m, int(messageId), limitedText)
+						} else {
+							messageId := getSelectedMessageId(m)
+							return m, editMessageCmd(m, messageId, limitedText)
+						}
+
+						//return m, editMessageCmd(m, messageId, limitedText)
 					}
 					return m, nil
 				}
@@ -348,6 +377,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			} else if m.tabs[m.openTabIndex] == "Live chat" {
 				switch msg.String() {
+				case "q":
+					m.quitting = true
+					return m, tea.Quit
 				case "right":
 					if m.openTabIndex < len(m.tabs)-1 {
 						m.openTabIndex++
@@ -373,6 +405,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.contentEndIndexes[m.openTabIndex]++
 						}
 					}
+				case "l":
+					_, ids, _, _ := buildContentSubscribeItems(m)
+					messageId := ids[m.cursorIndexes[m.openTabIndex]]
+					if m.client.clientState.User.Id == m.messages[int64(messageId)].UserId {
+						// ne moreš likeat sam svoj message
+						return m, nil
+					}
+					return m, likeMessageCmd(m, messageId)
+				case "d":
+					_, ids, _, _ := buildContentSubscribeItems(m)
+					messageId := ids[m.cursorIndexes[m.openTabIndex]]
+					if m.client.clientState.User.Id != m.messages[int64(messageId)].UserId {
+						// ne moreš brisat tujih sporočil
+						return m, nil
+					}
+					return m, deleteMessageCmd(m, messageId)
+				case "p":
+					if len(m.subscribedTopicIds) == 0 {
+						return m, nil
+					}
+					// postamo nov message
+					m.messagesStartIndex += newMessageInputHeight
+					m.contentStartIndexes[m.openTabIndex] += newMessageInputHeight
+					m.postNewMessageMode = true
+					m.postNewMessageInput.Focus()
+					return m, nil
+				case "e":
+					index := getSelectedSubscriptionItemIndex(m)
+					if m.subscribeItems[index].UserId != m.client.clientState.User.Id {
+						// ne moreš editat message ki ni tvoj
+						m.editMessageMode = false
+						return m, nil
+					}
+
+					m.messagesStartIndex += newMessageInputHeight
+					m.contentStartIndexes[m.openTabIndex] += newMessageInputHeight
+					// uporabmo isti input kt za nov message
+					m.postNewMessageInput.Focus()
+					m.editMessageMode = true
+					//return m, editMessageCmd(m, messageId, m.postNewMessageInput.Value())
+					return m, nil
 				}
 			} else if m.openTopicId != -1 {
 				// beremo sporočila nekega topica
@@ -446,11 +519,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "p":
 					// postamo nov message
 					m.messagesStartIndex += newMessageInputHeight
+					m.contentStartIndexes[m.openTabIndex] += newMessageInputHeight
 					m.postNewMessageMode = true
 					m.postNewMessageInput.Focus()
 					return m, nil
 				case "s":
 					// subscribamo se na topic
+					m.subscribedTopicIds = append(m.subscribedTopicIds, m.openTopicId)
 					return m, subscribeCmd(m, int(m.openTopicId))
 				}
 			} else {
@@ -538,6 +613,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 
 						index := m.cursorIndexes[m.openTabIndex]
+						m.subscribedTopicIds = append(m.subscribedTopicIds, ids[index])
 
 						return m, subscribeCmd(m, int(ids[index]))
 					}
@@ -650,6 +726,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.contentStartIndexes[1] = max(0, m.contentEndIndexes[1]-contentHeight+2*contnetPadddingTopBottom+1)
+
+			/*if msg.event.OpType == "DELETE" {
+				delete(m.messages, msg.event.MessageId)
+			}*/
 
 			// poslušamo naprej
 			return m, listenForSubscriptionEvents(m.client.clientState)
@@ -839,6 +919,8 @@ func getTabsPadding(m model) string {
 func getLiveChatView(m model) string {
 	s := ""
 
+	//contentHeight := contentHeight - footerHeight - contnetPadddingTopBottom*2
+
 	if len(m.subscribeItems) == 0 {
 		noSubscriptionstext := "No new messages."
 		s += getMarginLeftString(m) + verticalLineChar + getContnetPaddingSidesString(m) + noSubscriptionstext
@@ -850,24 +932,76 @@ func getLiveChatView(m model) string {
 		// footer
 		s += getMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
 		s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+
+		// -----
 		legendString := "q - quit"
 		s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
 		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 	} else {
 		s += getSubscribeItemsString(m)
-		renderedLines := (m.contentEndIndexes[1] - m.contentStartIndexes[1] + 1) + contnetPadddingTopBottom
+		renderedLines := m.contentEndIndexes[1] - m.contentStartIndexes[1] + 1
+
 		// zapolnemo, če je prazno
-		for renderedLines < contentHeight {
+		/*viewport := contentHeight - 2*contnetPadddingTopBottom - 2
+		if m.postNewMessageMode {
+			viewport -= newMessageInputHeight
+		}*/
+		/*for renderedLines < contentHeight {
+			emptyLine := getMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar
+			s += emptyLine + "\n"
+			renderedLines++
+		}*/
+		// zapolnemo stran če je prazna
+		viewport := contentHeight - 2*contnetPadddingTopBottom + 1
+		if m.postNewMessageMode || m.editMessageMode {
+			viewport -= newMessageInputHeight
+		}
+		for renderedLines < viewport {
 			emptyLine := getMarginLeftString(m) + verticalLineChar + getFillWithString(m, contentWidth, " ") + verticalLineChar
 			s += emptyLine + "\n"
 			renderedLines++
 		}
+
 		// footer
 		//s += getContnetPaddingTopBottomString(m)
-		s += getMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
+		/*s += getMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
 		s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 		legendString := "p - post new message on selected topic " + verticalLineChar + " q - quit"
 		s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
+		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"*/
+		// footer
+		s += getMarginLeftString(m) + TrightChar + getFillWithString(m, contentWidth, horizontalLineChar) + TleftChar + "\n"
+
+		if m.postNewMessageMode || m.editMessageMode {
+			// delamo nov message ali pa editamo nek message
+			wrappedInput := wrapText(m.postNewMessageInput.Value(), messageItemWidth)
+			if len(wrappedInput) == 0 {
+				wrappedInput = []string{""}
+			}
+			prefix := "New message: "
+			if m.editMessageMode {
+				prefix = "Edit message: "
+			}
+			for i := 0; i < newMessageInputHeight+1; i++ {
+				s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+				var line string
+				if i < len(wrappedInput) {
+					line = wrappedInput[i]
+				}
+				if i == 0 {
+					s += prefix + line
+				} else {
+					s += getFillWithString(m, len(prefix), " ") + line
+				}
+				s += getFillWithString(m, contentWidth-(len(prefix)+runewidth.StringWidth(line)+tabsPadding), " ")
+				s += verticalLineChar + "\n"
+			}
+
+		} else {
+			s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
+			legendString := "p - post new message on selected topic " + verticalLineChar + " q - quit"
+			s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
+		}
 		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 	}
 
@@ -896,10 +1030,23 @@ func getSubscribeItemsString(m model) string {
 
 		_, pl := printLegend[i]
 		if pl && legend[i] != 0 && ids[iCursor] == ids[i] {
-			legendString := "l - like"
-			if m.messages[int64(ids[iCursor])].UserId == m.client.clientState.User.Id {
+			legendString := ""
+
+			index := getSelectedSubscriptionItemIndex(m)
+			if m.subscribeItems[index].UserId == m.client.clientState.User.Id {
 				legendString = "e - edit " + verticalLineChar + " d - delete"
+			} else {
+				legendString = "l - like"
 			}
+
+			/*_, exsists := m.messages[int64(ids[iCursor])]
+			if exsists {
+				if m.messages[int64(ids[iCursor])].UserId == m.client.clientState.User.Id {
+					legendString = "e - edit " + verticalLineChar + " d - delete"
+				} else {
+					legendString = "l - like"
+				}
+			}*/
 			if legend[i] == 2 {
 				legendString = "s - unsubscribe"
 			}
@@ -1025,6 +1172,11 @@ func getTopicsString(m model) string {
 				name := m.topics[ids[i]]
 				s += fmt.Sprintf("%s [%d]", name, ids[i])
 				legendString := "m - messages " + verticalLineChar + " s - subscribe"
+				topicId := m.cursorIndexes[m.openTabIndex]
+				topicId++
+				if contains(m.subscribedTopicIds, int64(topicId)) {
+					legendString = "m - messages " + verticalLineChar + " s - unsubscribe"
+				}
 				s += getFillWithString(m, contentWidth-(4+len(name)+digits(ids[i])+3+len(legendString)+contnetPadddingSides-2), " ")
 				s += legendString + getFillWithString(m, contnetPadddingSides, " ")
 				//contentIndex = len(name) + digits(ids[i]) + 3 + 4
@@ -1064,6 +1216,9 @@ func getOpenTopicString(m model) string {
 	currLineIndex := contnetPadddingTopBottom
 	// ime topica
 	legendString := "s - subscribe"
+	if contains(m.subscribedTopicIds, m.openTopicId) {
+		legendString = "s - unsubscribe"
+	}
 	s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getContnetPaddingSidesString(m)
 	s += m.topics[m.openTopicId] + fmt.Sprintf(" [%d]", m.openTopicId)
 	s += getFillWithString(m, contentWidth-(len(m.topics[m.openTopicId])+digits(m.openTopicId)+3+len(legendString)+2*contnetPadddingSides), " ")
@@ -1109,7 +1264,8 @@ func getOpenTopicString(m model) string {
 	} else {
 		s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 		legendString := "p - post new message " + verticalLineChar + " b - back " + verticalLineChar + " q - quit"
-		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-4), " ") + verticalLineChar + "\n"
+		//s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-4), " ") + verticalLineChar + "\n"
+		s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
 	}
 	s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 
@@ -1169,7 +1325,7 @@ func getMessageItemsString(m model, currLineIndex int) string {
 
 	// zapolnemo stran če je prazna
 	viewport := contentHeight - 2*contnetPadddingTopBottom - 2
-	if m.postNewMessageMode {
+	if m.postNewMessageMode || m.editMessageMode {
 		viewport -= newMessageInputHeight
 	}
 	for renderedLines < viewport {
@@ -1314,6 +1470,7 @@ func likeMessageCmd(m model, messageId int) tea.Cmd {
 func deleteMessageCmd(m model, messageId int) tea.Cmd {
 	return func() tea.Msg {
 		err := client.DeleteMessage(m.client.clientState, int64(messageId), int(m.openTopicId))
+		delete(m.messages, int64(messageId))
 		return deleteMessageMsg{
 			messageId: messageId,
 			err:       err,
@@ -1332,9 +1489,9 @@ func editMessageCmd(m model, messageId int, text string) tea.Cmd {
 	}
 }
 
-func postNewMessageCmd(m model, message string) tea.Cmd {
+func postNewMessageCmd(m model, message string, topicId int) tea.Cmd {
 	return func() tea.Msg {
-		message, err := client.PostMessage(m.client.clientState, m.openTopicId, message)
+		message, err := client.PostMessage(m.client.clientState, int64(topicId), message)
 		return postNewMessageMsg{
 			message: message,
 			err:     err,
@@ -1432,6 +1589,22 @@ func wrapText(text string, width int) []string {
 	return lines
 }
 
+func getSelectedSubscriptionItemIndex(m model) int {
+	_, ids, _, _ := buildContentSubscribeItems(m)
+
+	cursor := m.cursorIndexes[m.openTabIndex]
+	messageId := ids[cursor]
+
+	// poiščemo ustrezen subscription event
+	for i := len(m.subscribeItems) - 1; i >= 0; i-- {
+		if m.subscribeItems[i].MessageId == int64(messageId) {
+			return i
+		}
+	}
+
+	return -1
+}
+
 func getLastMessageCursorIndex(m model) int {
 	if len(m.messages) == 0 {
 		return 0
@@ -1474,6 +1647,15 @@ func getSelectedMessageId(m model) int {
 
 	_, messageIds, _ := buildContentMessages(m, messages)
 	return messageIds[m.cursorMessagesIndex]
+}
+
+func contains[T comparable](arr []T, v T) bool {
+	for _, x := range arr {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 func RunUI() {

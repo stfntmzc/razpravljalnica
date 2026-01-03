@@ -41,6 +41,7 @@ type Subscription struct {
 type UiSubscriptionEventItem struct {
 	Username  string
 	UserId    int64
+	OpByUser  int64
 	MessageId int64
 	Timestamp *timestamppb.Timestamp
 	Likes     int64
@@ -169,6 +170,7 @@ func PostMessage(clientState *ClientState, topicId int64, text string) (*UiMessa
 		Timestamp: message.CreatedAt,
 		Likes:     0,
 		Text:      []string{message.Text},
+		TopicId:   message.TopicId,
 	}, nil
 }
 
@@ -403,6 +405,7 @@ type UiMessageItem struct {
 	Timestamp *timestamppb.Timestamp
 	Likes     int64
 	Text      []string // array stringov širine messageItemWidth
+	TopicId   int64
 }
 
 func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageItem, error) {
@@ -426,6 +429,7 @@ func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageI
 			Timestamp: msg.CreatedAt,
 			Likes:     int64(msg.Likes),
 			Text:      []string{msg.Text},
+			TopicId:   msg.TopicId,
 		}
 	}
 	return uiMessages, nil
@@ -695,8 +699,9 @@ func SubscribeToTopic(clientState *ClientState, topicId int64) error {
 			event.Message.Text, event.Message.Likes)*/
 
 			uiEvent := UiSubscriptionEventItem{
-				Username: fmt.Sprintf("user_%d", event.ExecutedById), // za enkrat
-				//UserId:    event.ExecutedById,
+				Username:  fmt.Sprintf("user_%d", event.ExecutedById), // za enkrat
+				UserId:    event.Message.UserId,
+				OpByUser:  event.ExecutedById,
 				MessageId: event.Message.Id,
 				Timestamp: event.EventAt,
 				Likes:     int64(event.Message.Likes),
