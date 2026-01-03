@@ -225,6 +225,7 @@ func (o *Orchestrator) GetSubscriptionNode(ctx context.Context, req *pb.Subscrip
 	lo := int32(math.MaxInt32)
 
 	for id, subs := range o.nodeSubs {
+		fmt.Printf("node with id %s has %d subscriptions, highest rn is %d", id, subs, lo)
 		if subs < lo {
 			best = id
 			lo = subs
@@ -242,10 +243,10 @@ func (o *Orchestrator) GetSubscriptionNode(ctx context.Context, req *pb.Subscrip
 	o.validTokens[token] = &TokenInfo{
 		UserId:   req.UserId,
 		TopicIds: req.TopicId,
-		NodeId:   bestNodeId,
+		NodeId:   best,
 	}
 
-	fmt.Printf("Subscription assigned to %s (%s), token: %s\n", best, node.Address, token)
+	fmt.Printf("Subscription assigned to %s (%s), token: %s\n, ", best, node.Address, token)
 
 	return &pb.SubscriptionNodeResponse{
 		SubscribeToken: token,
