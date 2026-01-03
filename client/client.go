@@ -24,7 +24,7 @@ type ClientState struct {
 	connTail      *grpc.ClientConn
 	rpcTail       pb.MessageBoardClient
 	User          *pb.User
-	ctx           context.Context
+	Ctx           context.Context
 	cancel        context.CancelFunc
 	Subscriptions map[int64]Subscription // topic id -> subscription
 	// za ui
@@ -144,7 +144,7 @@ func writeHandler(clientState *ClientState, args []string) {
 		Text:    text,
 	}
 
-	message, err := clientState.rpcHead.PostMessage(clientState.ctx, req)
+	message, err := clientState.rpcHead.PostMessage(clientState.Ctx, req)
 	if err != nil {
 		fmt.Println("Error posting message:", err)
 		return
@@ -159,7 +159,7 @@ func PostMessage(clientState *ClientState, topicId int64, text string) (*UiMessa
 		UserId:  clientState.User.Id,
 		Text:    text,
 	}
-	message, err := clientState.rpcHead.PostMessage(clientState.ctx, req)
+	message, err := clientState.rpcHead.PostMessage(clientState.Ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func newtopicHandler(clientState *ClientState, args []string) {
 		Name:   name,
 		UserId: clientState.User.Id,
 	}
-	topic, err := clientState.rpcHead.CreateTopic(clientState.ctx, req)
+	topic, err := clientState.rpcHead.CreateTopic(clientState.Ctx, req)
 	if err != nil {
 		fmt.Println("Error creating topic:", err)
 		return
@@ -208,7 +208,7 @@ func CreateTopic(clientState *ClientState, name string) error {
 		Name:   name,
 		UserId: clientState.User.Id,
 	}
-	_, err := clientState.rpcHead.CreateTopic(clientState.ctx, req)
+	_, err := clientState.rpcHead.CreateTopic(clientState.Ctx, req)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func editHandler(clientState *ClientState, args []string) {
 		MessageId: messageId,
 		Text:      text,
 	}
-	message, err := clientState.rpcHead.UpdateMessage(clientState.ctx, req)
+	message, err := clientState.rpcHead.UpdateMessage(clientState.Ctx, req)
 	if err != nil {
 		fmt.Println("Error updating message:", err)
 		return
@@ -247,7 +247,7 @@ func EditMessage(clientState *ClientState, messageId int, text string) error {
 		Text:      text,
 		UserId:    clientState.User.Id,
 	}
-	_, err := clientState.rpcHead.UpdateMessage(clientState.ctx, req)
+	_, err := clientState.rpcHead.UpdateMessage(clientState.Ctx, req)
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func delHandler(clientState *ClientState, args []string) {
 		MessageId: messageId,
 		UserId:    clientState.User.Id,
 	}
-	_, err2 := clientState.rpcHead.DeleteMessage(clientState.ctx, req)
+	_, err2 := clientState.rpcHead.DeleteMessage(clientState.Ctx, req)
 	if err2 != nil {
 		fmt.Println("Error deleting message:", err2)
 		return
@@ -295,7 +295,7 @@ func likeHandler(clientState *ClientState, args []string) {
 		UserId:    clientState.User.Id,
 	}
 
-	msg, err := clientState.rpcHead.LikeMessage(clientState.ctx, req)
+	msg, err := clientState.rpcHead.LikeMessage(clientState.Ctx, req)
 	if err != nil {
 		fmt.Println("Error liking message:", err)
 		return
@@ -312,7 +312,7 @@ func LikeMessage(clientState *ClientState, messageId int64, topicId int) error {
 		TopicId:   int64(topicId),
 	}
 	//fmt.Printf("%d", messageId)
-	_, err := clientState.rpcHead.LikeMessage(clientState.ctx, req)
+	_, err := clientState.rpcHead.LikeMessage(clientState.Ctx, req)
 	if err != nil {
 		return err
 	}
@@ -327,7 +327,7 @@ func DeleteMessage(clientState *ClientState, messageId int64, topicId int) error
 		TopicId:   int64(topicId),
 	}
 	//fmt.Printf("%d", messageId)
-	_, err := clientState.rpcHead.DeleteMessage(clientState.ctx, req)
+	_, err := clientState.rpcHead.DeleteMessage(clientState.Ctx, req)
 	if err != nil {
 		return err
 	}
@@ -335,7 +335,7 @@ func DeleteMessage(clientState *ClientState, messageId int64, topicId int) error
 }
 
 func listTopicsHandler(clientState *ClientState, args []string) {
-	response, err := clientState.rpcTail.ListTopics(clientState.ctx, &emptypb.Empty{})
+	response, err := clientState.rpcTail.ListTopics(clientState.Ctx, &emptypb.Empty{})
 	if err != nil {
 		fmt.Println("Error listing topics:", err)
 		return
@@ -349,7 +349,7 @@ func listTopicsHandler(clientState *ClientState, args []string) {
 
 // za ui
 func GetTopics(clientState *ClientState) (map[int64]string, error) {
-	response, err := clientState.rpcTail.ListTopics(clientState.ctx, &emptypb.Empty{})
+	response, err := clientState.rpcTail.ListTopics(clientState.Ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +385,7 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 		Limit:         limit,
 	}
 
-	response, err := clientState.rpcTail.GetMessages(clientState.ctx, req)
+	response, err := clientState.rpcTail.GetMessages(clientState.Ctx, req)
 	if err != nil {
 		fmt.Println("Error getting messages:", err)
 		return
@@ -414,7 +414,7 @@ func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageI
 		FromMessageId: 0,
 		Limit:         -1,
 	}
-	messages, err := clientState.rpcTail.GetMessages(clientState.ctx, req)
+	messages, err := clientState.rpcTail.GetMessages(clientState.Ctx, req)
 	if err != nil {
 		//fmt.Println("Error getting messages:", err)
 		return nil, fmt.Errorf("Error getting messages")
@@ -465,7 +465,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		}
 
 		// Naredimo ločen context za to subscription
-		subCtx, cancel := context.WithCancel(clientState.ctx)
+		subCtx, cancel := context.WithCancel(clientState.Ctx)
 
 		// tukej dobimo subscribe node
 		nodeReq := &pb.SubscriptionNodeRequest{
@@ -582,7 +582,7 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 				Token:  clientState.Subscriptions[topicId].token,
 				UserId: clientState.User.Id,
 			}
-			_, err := clientState.rpcHead.ExpireSubscription(clientState.ctx, req)
+			_, err := clientState.rpcHead.ExpireSubscription(clientState.Ctx, req)
 			if err != nil {
 				fmt.Printf("Error unsubscribing from topic %d: %s\n", topicId, err)
 				continue
@@ -602,6 +602,28 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 }
 
 // za ui
+func UnsubscribeFromTopic(clientState *ClientState, topicId int64) error {
+	subscription, exists := clientState.Subscriptions[topicId]
+	if exists {
+		req := &pb.ExpireSubscriptionRequest{
+			Token:  clientState.Subscriptions[topicId].token,
+			UserId: clientState.User.Id,
+		}
+		_, err := clientState.rpcHead.ExpireSubscription(clientState.Ctx, req)
+		if err != nil {
+			//fmt.Printf("Error unsubscribing from topic %d: %s\n", topicId, err)
+			return fmt.Errorf("Error unsubscribing from topic %d: %s", topicId, err)
+		}
+		subscription.cancelSub()
+		delete(clientState.Subscriptions, topicId)
+		//fmt.Printf("Unsubscribed from topic %d\n", topicId)
+		return nil
+	}
+	//fmt.Printf("Not subscribed to topic %d\n", topicId)
+	return fmt.Errorf("Not subscribed to topic %d", topicId)
+}
+
+// za ui
 func SubscribeToTopic(clientState *ClientState, topicId int64) error {
 	_, exists := clientState.Subscriptions[int64(topicId)]
 	if exists {
@@ -612,7 +634,7 @@ func SubscribeToTopic(clientState *ClientState, topicId int64) error {
 	// tukaj se mora nekaj dogajati z gorutinami, ali pa moram pošiljati v nek kanal, iz katerega bo ui bral
 
 	// Naredimo ločen context za to subscription
-	subCtx, cancel := context.WithCancel(clientState.ctx)
+	subCtx, cancel := context.WithCancel(clientState.Ctx)
 
 	// tukej dobimo subscribe node
 	nodeReq := &pb.SubscriptionNodeRequest{
@@ -713,7 +735,7 @@ func SubscribeToTopic(clientState *ClientState, topicId int64) error {
 			select {
 			case clientState.SubscriptionEventsChan <- uiEvent:
 				// poslano UI-ju
-			case <-clientState.ctx.Done():
+			case <-clientState.Ctx.Done():
 				return
 			}
 		}
@@ -775,7 +797,7 @@ func connectToServer(username string, urlHead string, urlTail string) (*ClientSt
 		connTail:               connTail,
 		rpcTail:                clientTail,
 		User:                   user,
-		ctx:                    ctx,
+		Ctx:                    ctx,
 		cancel:                 cancel,
 		Subscriptions:          make(map[int64]Subscription),
 		SubscriptionEventsChan: make(chan UiSubscriptionEventItem, 100),

@@ -131,6 +131,11 @@ type subscribeMsg struct {
 	err     error
 }
 
+type unsubscribeMsg struct {
+	topicId int64
+	err     error
+}
+
 type subscriptionEventMsg struct {
 	event client.UiSubscriptionEventItem
 }
@@ -446,6 +451,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.editMessageMode = true
 					//return m, editMessageCmd(m, messageId, m.postNewMessageInput.Value())
 					return m, nil
+				case "s":
+					itemIndex := getSelectedSubscriptionItemIndex(m)
+					topicId := m.subscribeItems[itemIndex].TopicId
+					if contains(m.subscribedTopicIds, topicId) {
+						// unsubscribe
+						return m, unsubscribeCmd(m, int(topicId))
+					}
+					// subscribe
+					return m, subscribeCmd(m, int(topicId))
 				}
 			} else if m.openTopicId != -1 {
 				// beremo sporočila nekega topica
@@ -524,8 +538,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.postNewMessageInput.Focus()
 					return m, nil
 				case "s":
-					// subscribamo se na topic
-					m.subscribedTopicIds = append(m.subscribedTopicIds, m.openTopicId)
+					if contains(m.subscribedTopicIds, m.openTopicId) {
+						// unsubscribe
+						//m.subscribedTopicIds = removeInt64(m.subscribedTopicIds, m.openTopicId)
+						return m, unsubscribeCmd(m, int(m.openTopicId))
+					}
+					// subscribe
+					//m.subscribedTopicIds = append(m.subscribedTopicIds, m.openTopicId)
 					return m, subscribeCmd(m, int(m.openTopicId))
 				}
 			} else {
@@ -604,8 +623,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case "s":
 					if m.tabs[m.openTabIndex] == "Topics" && m.cursorIndexes[m.openTabIndex] >= 0 {
-						// subscribamo se na neko temo
-						// sprtiramo teme po id-jih
+						// sortiramo teme po id-jih
 						ids := make([]int64, 0, len(m.topics))
 						for id := range m.topics {
 							ids = append(ids, id)
@@ -613,9 +631,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 
 						index := m.cursorIndexes[m.openTabIndex]
-						m.subscribedTopicIds = append(m.subscribedTopicIds, ids[index])
-
-						return m, subscribeCmd(m, int(ids[index]))
+						topicId := ids[index]
+						if contains(m.subscribedTopicIds, topicId) {
+							// unsubscribe
+							//m.subscribedTopicIds = removeInt64(m.subscribedTopicIds, m.openTopicId)
+							return m, unsubscribeCmd(m, int(topicId))
+						}
+						//m.subscribedTopicIds = append(m.subscribedTopicIds, ids[index])
+						return m, subscribeCmd(m, int(topicId))
 					}
 				}
 			}
@@ -701,7 +724,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// uspešen subscription
 			//fmt.Printf("subbed to %d", msg.topicId)
 			m.subscribedTopicIds = append(m.subscribedTopicIds, msg.topicId) // zato da vemo kakšno legendo napisati na nekem topicu
+			//fmt.Println(m.subscribedTopicIds)
 			return m, listenForSubscriptionEvents(m.client.clientState)
+		case unsubscribeMsg:
+			if msg.err != nil {
+				//fmt.Println("!!!")
+				return m, nil
+			}
+			// uspešen unsubscribe
+			//fmt.Printf("subbed to %d", msg.topicId)
+			m.subscribedTopicIds = removeInt64(m.subscribedTopicIds, msg.topicId) // zato da vemo kakšno legendo napisati na nekem topicu
+			//fmt.Println(m.subscribedTopicIds)
+			return m, nil
 		case subscriptionEventMsg:
 			// da vemo ali je bil cursor na dnu
 			oldEnd := m.contentEndIndexes[1]
@@ -1048,7 +1082,13 @@ func getSubscribeItemsString(m model) string {
 				}
 			}*/
 			if legend[i] == 2 {
-				legendString = "s - unsubscribe"
+				topicId := m.subscribeItems[index].TopicId
+				if contains(m.subscribedTopicIds, topicId) {
+					legendString = "s - unsubscribe"
+				} else {
+					legendString = "s - subscribe"
+				}
+
 			}
 			line += getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+messageItemWidth+2*contnetPadddingSides), " ")
 			line += legendString
@@ -1509,14 +1549,27 @@ func subscribeCmd(m model, topicId int) tea.Cmd {
 	}
 }
 
+func unsubscribeCmd(m model, topicId int) tea.Cmd {
+	return func() tea.Msg {
+		err := client.UnsubscribeFromTopic(m.client.clientState, int64(topicId))
+		return unsubscribeMsg{
+			topicId: int64(topicId),
+			err:     err,
+		}
+	}
+}
+
 func listenForSubscriptionEvents(clientState *client.ClientState) tea.Cmd {
 	return func() tea.Msg {
-		event, ok := <-clientState.SubscriptionEventsChan
-		if !ok {
+		select {
+		case event, ok := <-clientState.SubscriptionEventsChan:
+			if !ok {
+				return nil
+			}
+			return subscriptionEventMsg{event: event}
+
+		case <-clientState.Ctx.Done():
 			return nil
-		}
-		return subscriptionEventMsg{
-			event: event,
 		}
 	}
 }
@@ -1656,6 +1709,15 @@ func contains[T comparable](arr []T, v T) bool {
 		}
 	}
 	return false
+}
+
+func removeInt64(slice []int64, v int64) []int64 {
+	for i, x := range slice {
+		if x == v {
+			return append(slice[:i], slice[i+1:]...)
+		}
+	}
+	return slice
 }
 
 func RunUI() {
