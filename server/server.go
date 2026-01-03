@@ -1306,8 +1306,8 @@ func (server *MessageBoardServer) ExpireSubscription(ctx context.Context, req *p
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	server.subscribersPerNode[subInfo.nodeId]--
-	delete(server.subscriptions, req.Token)
 	fmt.Printf("USER [%d] %s UNSUBSCRIBED FROM TOPIC [%d] ON NODE %s\n", req.UserId, server.users[req.UserId].Name, server.subscriptions[req.Token].topicId, subInfo.nodeId)
+	delete(server.subscriptions, req.Token)
 	return nil, nil
 }
 

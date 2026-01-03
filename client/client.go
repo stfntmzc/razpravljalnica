@@ -601,6 +601,22 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 	}
 }
 
+func UnsubscribeFromAll(clientState *ClientState) error {
+	for topicId, subscription := range clientState.Subscriptions {
+		req := &pb.ExpireSubscriptionRequest{
+			Token:  clientState.Subscriptions[topicId].token,
+			UserId: clientState.User.Id,
+		}
+		_, err := clientState.rpcHead.ExpireSubscription(clientState.Ctx, req)
+		if err != nil {
+			return fmt.Errorf("Error unsubscribing from topic %d: %s", topicId, err)
+		}
+		subscription.cancelSub()
+		delete(clientState.Subscriptions, topicId)
+	}
+	return nil
+}
+
 // za ui
 func UnsubscribeFromTopic(clientState *ClientState, topicId int64) error {
 	subscription, exists := clientState.Subscriptions[topicId]

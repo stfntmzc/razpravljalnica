@@ -216,6 +216,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 
 			case "ctrl+c", "q":
+				client.UnsubscribeFromAll(m.client.clientState)
 				m.quitting = true
 				return m, tea.Quit
 
@@ -383,6 +384,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.tabs[m.openTabIndex] == "Live chat" {
 				switch msg.String() {
 				case "q":
+					client.UnsubscribeFromAll(m.client.clientState)
 					m.quitting = true
 					return m, tea.Quit
 				case "right":
@@ -501,6 +503,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				case "q":
+					client.UnsubscribeFromAll(m.client.clientState)
 					m.quitting = true
 					return m, tea.Quit
 				case "l":
@@ -550,6 +553,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				switch msg.String() {
 				case "ctrl+c", "q":
+					client.UnsubscribeFromAll(m.client.clientState)
 					m.quitting = true
 					return m, tea.Quit
 				case "c":
@@ -1722,6 +1726,7 @@ func removeInt64(slice []int64, v int64) []int64 {
 
 func RunUI() {
 	m := initialModel()
+	//defer client.UnsubscribeFromAll(m.client.clientState)
 	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
