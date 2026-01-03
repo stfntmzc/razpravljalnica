@@ -422,8 +422,17 @@ func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageI
 	// naredimo map
 	uiMessages := make(map[int64]UiMessageItem)
 	for _, msg := range messages.Messages {
+		getUserReq := &pb.GetUserRequest{
+			UserId:    msg.UserId,
+			RequestBy: clientState.User.Id,
+		}
+		user, err := clientState.rpcHead.GetUser(clientState.Ctx, getUserReq)
+		if err != nil {
+			continue
+		}
 		uiMessages[msg.Id] = UiMessageItem{
-			Username:  fmt.Sprintf("user_%d", msg.UserId), // začasno
+			//Username: fmt.Sprintf("user_%d", msg.UserId), // začasno
+			Username:  fmt.Sprintf("%s", user.Name),
 			UserId:    msg.UserId,
 			Id:        msg.Id,
 			Timestamp: msg.CreatedAt,
@@ -736,8 +745,17 @@ func SubscribeToTopic(clientState *ClientState, topicId int64) error {
 			opName, event.Message.TopicId, event.Message.Id,
 			event.Message.Text, event.Message.Likes)*/
 
+			getUserReq := &pb.GetUserRequest{
+				UserId:    event.ExecutedById,
+				RequestBy: clientState.User.Id,
+			}
+			user, err := clientState.rpcHead.GetUser(clientState.Ctx, getUserReq)
+			if err != nil {
+				continue
+			}
+
 			uiEvent := UiSubscriptionEventItem{
-				Username:  fmt.Sprintf("user_%d", event.ExecutedById), // za enkrat
+				Username:  fmt.Sprintf("%s", user.Name),
 				UserId:    event.Message.UserId,
 				OpByUser:  event.ExecutedById,
 				MessageId: event.Message.Id,

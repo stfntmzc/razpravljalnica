@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // konstante
@@ -50,6 +51,13 @@ const (
 	newMessageInputHeight = 2
 
 	cursorChar = ">"
+)
+
+var (
+	// barve
+	aqua = "86"
+
+	aquaColorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(aqua))
 )
 
 type model struct {
@@ -829,7 +837,7 @@ func loginView(m model) string {
 		if m.focus == i {
 			cursor = ">"
 		}
-		s += fmt.Sprintf("	%s %s %s\n", cursor, labels[i], input.View())
+		s += fmt.Sprintf("	%s %s %s\n", aquaColorStyle.Render(cursor), labels[i], input.View())
 	}
 
 	return s
@@ -841,7 +849,7 @@ func getTabsString(m model) string {
 	for i := 0; i < len(m.tabs); i++ {
 		s += topLeftChar
 		totalTbasWidth++
-		for j := 0; j < len(m.tabs[i])+2*tabsPadding; j++ {
+		for j := 0; j < runewidth.StringWidth(m.tabs[i])+2*tabsPadding; j++ {
 			s += horizontalLineChar
 			totalTbasWidth++
 		}
@@ -857,7 +865,12 @@ func getTabsString(m model) string {
 		for j := 0; j < tabsPadding; j++ {
 			s += " "
 		}
-		s += m.tabs[i]
+		tabName := m.tabs[i]
+		if i == m.openTabIndex {
+			s += aquaColorStyle.Render(tabName)
+		} else {
+			s += tabName
+		}
 		for j := 0; j < tabsPadding; j++ {
 			s += " "
 		}
@@ -973,7 +986,7 @@ func getLiveChatView(m model) string {
 
 		// -----
 		legendString := "q - quit"
-		s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
+		s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
 		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 	} else {
 		s += getSubscribeItemsString(m)
@@ -1027,18 +1040,18 @@ func getLiveChatView(m model) string {
 					line = wrappedInput[i]
 				}
 				if i == 0 {
-					s += prefix + line
+					s += aquaColorStyle.Render(prefix) + line
 				} else {
-					s += getFillWithString(m, len(prefix), " ") + line
+					s += getFillWithString(m, runewidth.StringWidth(prefix), " ") + line
 				}
-				s += getFillWithString(m, contentWidth-(len(prefix)+runewidth.StringWidth(line)+tabsPadding), " ")
+				s += getFillWithString(m, contentWidth-(runewidth.StringWidth(prefix)+runewidth.StringWidth(line)+tabsPadding), " ")
 				s += verticalLineChar + "\n"
 			}
 
 		} else {
 			s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 			legendString := "p - post new message on selected topic " + verticalLineChar + " q - quit"
-			s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
+			s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
 		}
 		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 	}
@@ -1059,7 +1072,7 @@ func getSubscribeItemsString(m model) string {
 		line := getMarginLeftString(m) + verticalLineChar
 
 		if iCursor == i {
-			line += " " + cursorChar + " "
+			line += " " + aquaColorStyle.Render(cursorChar) + " "
 		} else {
 			line += getContnetPaddingSidesString(m)
 		}
@@ -1071,9 +1084,9 @@ func getSubscribeItemsString(m model) string {
 			legendString := ""
 
 			index := getSelectedSubscriptionItemIndex(m)
-			if m.subscribeItems[index].UserId == m.client.clientState.User.Id {
+			if m.subscribeItems[index].UserId == m.client.clientState.User.Id && !m.postNewMessageMode && !m.editMessageMode {
 				legendString = "e - edit " + verticalLineChar + " d - delete"
-			} else {
+			} else if !m.postNewMessageMode && !m.editMessageMode {
 				legendString = "l - like"
 			}
 
@@ -1085,7 +1098,7 @@ func getSubscribeItemsString(m model) string {
 					legendString = "l - like"
 				}
 			}*/
-			if legend[i] == 2 {
+			if legend[i] == 2 && !m.postNewMessageMode && !m.editMessageMode {
 				topicId := m.subscribeItems[index].TopicId
 				if contains(m.subscribedTopicIds, topicId) {
 					legendString = "s - unsubscribe"
@@ -1095,7 +1108,7 @@ func getSubscribeItemsString(m model) string {
 
 			}
 			line += getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+messageItemWidth+2*contnetPadddingSides), " ")
-			line += legendString
+			line += aquaColorStyle.Render(legendString)
 		} else {
 			filler := getFillWithString(m, contentWidth-(runewidth.StringWidth(content[i])+2*contnetPadddingSides), " ")
 			line += filler
@@ -1104,7 +1117,7 @@ func getSubscribeItemsString(m model) string {
 		line += getContnetPaddingSidesString(m) + verticalLineChar
 
 		// debug
-		line += fmt.Sprintf("%d %d %d %d %d", ids[iCursor], ids[i], m.messages[int64(ids[iCursor])].UserId, m.client.clientState.User.Id, printLegend[i])
+		//line += fmt.Sprintf("%d %d %d %d %d", ids[iCursor], ids[i], m.messages[int64(ids[iCursor])].UserId, m.client.clientState.User.Id, printLegend[i])
 
 		s += line + "\n"
 	}
@@ -1212,23 +1225,23 @@ func getTopicsString(m model) string {
 		if i < len(ids) {
 			// ali je cursor na topicu
 			if m.cursorIndexes[0] == i && !m.createTopicMode {
-				s += " " + cursorChar + "  "
+				s += " " + aquaColorStyle.Render(cursorChar) + "  "
 				name := m.topics[ids[i]]
-				s += fmt.Sprintf("%s [%d]", name, ids[i])
+				s += fmt.Sprintf("%s", name)
 				legendString := "m - messages " + verticalLineChar + " s - subscribe"
 				topicId := m.cursorIndexes[m.openTabIndex]
 				topicId++
 				if contains(m.subscribedTopicIds, int64(topicId)) {
 					legendString = "m - messages " + verticalLineChar + " s - unsubscribe"
 				}
-				s += getFillWithString(m, contentWidth-(4+len(name)+digits(ids[i])+3+len(legendString)+contnetPadddingSides-2), " ")
-				s += legendString + getFillWithString(m, contnetPadddingSides, " ")
+				s += getFillWithString(m, contentWidth-(4+runewidth.StringWidth(name)+runewidth.StringWidth(legendString)+contnetPadddingSides), " ")
+				s += aquaColorStyle.Render(legendString) + getFillWithString(m, contnetPadddingSides, " ")
 				//contentIndex = len(name) + digits(ids[i]) + 3 + 4
 			} else {
 				s += getContnetPaddingSidesString(m)
 				name := m.topics[ids[i]]
-				s += fmt.Sprintf("%s [%d]", name, ids[i])
-				contentIndex = len(name) + digits(ids[i]) + 3 + contnetPadddingSides
+				s += fmt.Sprintf("%s", name)
+				contentIndex = runewidth.StringWidth(name) + contnetPadddingSides
 				s += getFillWithString(m, contentWidth-contentIndex, " ")
 			}
 			s += verticalLineChar + "\n"
@@ -1243,11 +1256,12 @@ func getTopicsString(m model) string {
 	s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 	if m.createTopicMode {
 		// delamo nov topic
-		line := "New topic: " + m.createTopicInput.View()
-		s += line + getFillWithString(m, contentWidth-(len(line)+tabsPadding)+8, " ") + verticalLineChar + "\n"
+		prefix := "New topic: "
+		line := aquaColorStyle.Render(prefix) + m.createTopicInput.View()
+		s += line + getFillWithString(m, contentWidth-(runewidth.StringWidth(line)+tabsPadding-runewidth.StringWidth(prefix)-7), " ") + verticalLineChar + "\n"
 	} else {
 		legendString := "c - create new topic " + verticalLineChar + " q - quit"
-		s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-2), " ") + verticalLineChar + "\n"
+		s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
 	}
 	s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 
@@ -1259,14 +1273,16 @@ func getOpenTopicString(m model) string {
 
 	currLineIndex := contnetPadddingTopBottom
 	// ime topica
-	legendString := "s - subscribe"
-	if contains(m.subscribedTopicIds, m.openTopicId) {
+	legendString := ""
+	if contains(m.subscribedTopicIds, m.openTopicId) && !m.postNewMessageMode && !m.editMessageMode {
 		legendString = "s - unsubscribe"
+	} else if !m.postNewMessageMode && !m.editMessageMode {
+		legendString = "s - subscribe"
 	}
 	s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getContnetPaddingSidesString(m)
-	s += m.topics[m.openTopicId] + fmt.Sprintf(" [%d]", m.openTopicId)
-	s += getFillWithString(m, contentWidth-(len(m.topics[m.openTopicId])+digits(m.openTopicId)+3+len(legendString)+2*contnetPadddingSides), " ")
-	s += legendString + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
+	s += m.topics[m.openTopicId]
+	s += getFillWithString(m, contentWidth-(runewidth.StringWidth(m.topics[m.openTopicId])+runewidth.StringWidth(legendString)+2*contnetPadddingSides), " ")
+	s += aquaColorStyle.Render(legendString) + getContnetPaddingSidesString(m) + verticalLineChar + "\n"
 	currLineIndex++
 	for i := 0; i < messageItemMarginBottom; i++ {
 		s += getFillWithString(m, marginLeft, " ") + verticalLineChar + getFillWithString(m, contentWidth, horizontalLineChar) + verticalLineChar + "\n"
@@ -1297,11 +1313,11 @@ func getOpenTopicString(m model) string {
 				line = wrappedInput[i]
 			}
 			if i == 0 {
-				s += prefix + line
+				s += aquaColorStyle.Render(prefix) + line
 			} else {
-				s += getFillWithString(m, len(prefix), " ") + line
+				s += getFillWithString(m, runewidth.StringWidth(prefix), " ") + line
 			}
-			s += getFillWithString(m, contentWidth-(len(prefix)+runewidth.StringWidth(line)+tabsPadding), " ")
+			s += getFillWithString(m, contentWidth-(runewidth.StringWidth(prefix)+runewidth.StringWidth(line)+tabsPadding), " ")
 			s += verticalLineChar + "\n"
 		}
 
@@ -1309,7 +1325,7 @@ func getOpenTopicString(m model) string {
 		s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
 		legendString := "p - post new message " + verticalLineChar + " b - back " + verticalLineChar + " q - quit"
 		//s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-4), " ") + verticalLineChar + "\n"
-		s += legendString + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
+		s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
 	}
 	s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 
@@ -1339,25 +1355,25 @@ func getMessageItemsString(m model, currLineIndex int) string {
 	for i := iStart; i <= iEnd; i++ {
 		line := getMarginLeftString(m) + verticalLineChar
 		if m.cursorMessagesIndex == i && !m.postNewMessageMode {
-			line += " > "
+			line += " " + aquaColorStyle.Render(cursorChar) + " "
 		} else {
 			line += getContnetPaddingSidesString(m)
 		}
 		line += content[i]
-		if printLegend[i] && messageIds[m.cursorMessagesIndex] == messageIds[i] && !m.postNewMessageMode {
+		if printLegend[i] && messageIds[m.cursorMessagesIndex] == messageIds[i] && !m.postNewMessageMode && !m.editMessageMode {
 			//printLegend = false
 			legendString := "l - like"
 			if m.messages[int64(messageIds[i])].UserId == m.client.clientState.User.Id {
 				legendString = "e - edit " + verticalLineChar + " d - delete"
 			}
 			line += getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+messageItemWidth+2*contnetPadddingSides), " ")
-			line += legendString
+			line += aquaColorStyle.Render(legendString)
 		} else {
 			filler := getFillWithString(m, contentWidth-(runewidth.StringWidth(content[i])+2*contnetPadddingSides), " ")
 			line += filler
 		}
 		line += getContnetPaddingSidesString(m) + verticalLineChar
-		line += fmt.Sprintf("%d %d %d", messageIds[i], messageIds[m.cursorMessagesIndex], m.cursorMessagesIndex, printLegend[i])
+		//line += fmt.Sprintf("%d %d %d", messageIds[i], messageIds[m.cursorMessagesIndex], m.cursorMessagesIndex, printLegend[i])
 		s += line + "\n"
 		renderedLines++
 		/*if prevMessageId != messageIds[i] {
@@ -1391,7 +1407,8 @@ func buildContentMessages(m model, messages []client.UiMessageItem) ([]string, m
 	index := 0
 	for i, message := range messages {
 		// ime in likes
-		nameString := fmt.Sprintf("%s [%d]", message.Username, message.Id)
+		//fmt.Println("!!!")
+		nameString := fmt.Sprintf("%s:", message.Username)
 		likesString := fmt.Sprintf("%d likes", message.Likes)
 		//nameAndLikesString := nameString + getFillWithString(m, messageItemWidth-(len(nameString)+len(likesString)), " ") + likesString
 		nameAndLikesString := nameString + getFillWithString(m, messageItemWidth-(runewidth.StringWidth(nameString)+runewidth.StringWidth(likesString)), " ") + likesString

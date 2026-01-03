@@ -1333,5 +1333,18 @@ func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb
 	server.subscribersMu.RUnlock()
 }
 
+func (server *MessageBoardServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
+	user, ok := server.users[req.UserId]
+	if !ok {
+		fmt.Printf("user [%d] not found\n", req.UserId)
+		return nil, fmt.Errorf("user [%d] not found", req.UserId)
+	}
+	fmt.Printf("user [%d] requested user info [%d]\n", req.RequestBy, req.UserId)
+	return &pb.User{
+		Name: user.Name,
+		Id:   user.Id,
+	}, nil
+}
+
 // MESSAGEBOARD SERVER FUNKCIJE
 // =============================================
