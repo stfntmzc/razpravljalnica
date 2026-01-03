@@ -9,14 +9,13 @@
 package razpravljalnica
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -1049,8 +1048,10 @@ type MessageEvent struct {
 	Op             OpType                 `protobuf:"varint,2,opt,name=op,proto3,enum=razpravljalnica.OpType" json:"op,omitempty"`                   // type of event
 	Message        *Message               `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
 	EventAt        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=event_at,json=eventAt,proto3" json:"event_at,omitempty"` // timestamp of the event
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// DODANO
+	ExecutedById  int64 `protobuf:"varint,5,opt,name=executed_by_id,json=executedById,proto3" json:"executed_by_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MessageEvent) Reset() {
@@ -1109,6 +1110,13 @@ func (x *MessageEvent) GetEventAt() *timestamppb.Timestamp {
 		return x.EventAt
 	}
 	return nil
+}
+
+func (x *MessageEvent) GetExecutedById() int64 {
+	if x != nil {
+		return x.ExecutedById
+	}
+	return 0
 }
 
 // DODANO
@@ -1390,12 +1398,13 @@ const file_razpravljalnica_proto_rawDesc = "" +
 	"\btopic_id\x18\x02 \x03(\x03R\atopicId\"r\n" +
 	"\x18SubscriptionNodeResponse\x12'\n" +
 	"\x0fsubscribe_token\x18\x01 \x01(\tR\x0esubscribeToken\x12-\n" +
-	"\x04node\x18\x02 \x01(\v2\x19.razpravljalnica.NodeInfoR\x04node\"\xcb\x01\n" +
+	"\x04node\x18\x02 \x01(\v2\x19.razpravljalnica.NodeInfoR\x04node\"\xf1\x01\n" +
 	"\fMessageEvent\x12'\n" +
 	"\x0fsequence_number\x18\x01 \x01(\x03R\x0esequenceNumber\x12'\n" +
 	"\x02op\x18\x02 \x01(\x0e2\x17.razpravljalnica.OpTypeR\x02op\x122\n" +
 	"\amessage\x18\x03 \x01(\v2\x18.razpravljalnica.MessageR\amessage\x125\n" +
-	"\bevent_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\aeventAt\"C\n" +
+	"\bevent_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\aeventAt\x12$\n" +
+	"\x0eexecuted_by_id\x18\x05 \x01(\x03R\fexecutedById\"C\n" +
 	"\x12VerifyTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\x03R\x06userId\"+\n" +

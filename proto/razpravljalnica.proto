@@ -168,6 +168,8 @@ message MessageEvent {
   OpType op = 2; // type of event
   Message message = 3;
   google.protobuf.Timestamp event_at = 4; // timestamp of the event
+  // DODANO
+  int64 executed_by_id = 5;
 }
 
 // DODANO
