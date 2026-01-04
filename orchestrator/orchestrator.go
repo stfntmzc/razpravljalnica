@@ -41,16 +41,13 @@ func NewOrchestrator(nodeId, address, raftBind, raftDir string) *Orchestrator {
 }
 
 func (o *Orchestrator) Start(bootstrap bool) error {
-	// Setup Raft configuration
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(o.nodeId)
 
-	// Create data directory
 	if err := os.MkdirAll(o.raftDir, 0755); err != nil {
 		return err
 	}
 
-	// Setup Raft transport
 	addr, err := net.ResolveTCPAddr("tcp", o.raftBind)
 	if err != nil {
 		return err
@@ -60,7 +57,6 @@ func (o *Orchestrator) Start(bootstrap bool) error {
 		return err
 	}
 
-	// Create log store and stable store
 	logStore, err := raftboltdb.NewBoltStore(filepath.Join(o.raftDir, "raft-log.db"))
 	if err != nil {
 		return err
@@ -71,20 +67,17 @@ func (o *Orchestrator) Start(bootstrap bool) error {
 		return err
 	}
 
-	// Create snapshot store
 	snapshotStore, err := raft.NewFileSnapshotStore(o.raftDir, 2, os.Stderr)
 	if err != nil {
 		return err
 	}
 
-	// Create Raft instance
 	r, err := raft.NewRaft(config, o.fsm, logStore, stableStore, snapshotStore, transport)
 	if err != nil {
 		return err
 	}
 	o.raft = r
 
-	// Bootstrap if first node
 	if bootstrap {
 		configuration := raft.Configuration{
 			Servers: []raft.Server{
@@ -97,10 +90,7 @@ func (o *Orchestrator) Start(bootstrap bool) error {
 		r.BootstrapCluster(configuration)
 	}
 
-	// Start gRPC server
 	go o.startGRPC()
-
-	// Start health monitor
 	go o.monitorHealth()
 
 	fmt.Printf("Orchestrator %s started (raft: %s, grpc: %s)\n", o.nodeId, o.raftBind, o.address)
@@ -120,7 +110,6 @@ func (o *Orchestrator) startGRPC() {
 	grpcServer.Serve(listener)
 }
 
-// Join adds a new orchestrator to the cluster
 func (o *Orchestrator) Join(nodeId, raftAddr string) error {
 	if o.raft.State() != raft.Leader {
 		return fmt.Errorf("not the leader")
@@ -130,7 +119,6 @@ func (o *Orchestrator) Join(nodeId, raftAddr string) error {
 	return future.Error()
 }
 
-// Helper to apply commands through Raft
 func (o *Orchestrator) applyCommand(cmdType string, payload interface{}) error {
 	if o.raft.State() != raft.Leader {
 		return fmt.Errorf("not the leader")
@@ -177,7 +165,7 @@ func (o *Orchestrator) RegisterNode(ctx context.Context, req *pb.RegisterNodeReq
 
 	o.fsm.mu.Unlock()
 
-	// Apply through Raft
+	// apliciramo komande
 	err := o.applyCommand(CmdRegisterNode, RegisterNodePayload{
 		NodeId:  nodeId,
 		Address: req.Address,
@@ -200,7 +188,6 @@ func (o *Orchestrator) RegisterNode(ctx context.Context, req *pb.RegisterNodeReq
 }
 
 func (o *Orchestrator) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	// Apply heartbeat through Raft (or skip for performance - heartbeats are high frequency)
 	o.fsm.mu.Lock()
 	o.fsm.nodeHealth[req.NodeId] = time.Now()
 	o.fsm.nodeSubs[req.NodeId] = req.SubscriberCount
@@ -254,7 +241,6 @@ func (o *Orchestrator) GetSubscriptionNode(ctx context.Context, req *pb.Subscrip
 		return nil, fmt.Errorf("no nodes available")
 	}
 
-	// Find node with least subscribers
 	var bestNodeId string
 	var minSubs int32 = 1<<31 - 1
 
@@ -266,14 +252,12 @@ func (o *Orchestrator) GetSubscriptionNode(ctx context.Context, req *pb.Subscrip
 	}
 
 	if bestNodeId == "" {
-		// Fallback to first node
 		bestNodeId = o.fsm.chainOrder[0]
 	}
 
 	node := o.fsm.nodes[bestNodeId]
 	token := generateToken()
 
-	// Store token
 	o.fsm.validTokens[token] = &TokenInfo{
 		UserId:   req.UserId,
 		TopicIds: req.TopicId,
@@ -306,7 +290,6 @@ func (o *Orchestrator) VerifyToken(ctx context.Context, req *pb.VerifyTokenReque
 func (o *Orchestrator) monitorHealth() {
 	ticker := time.NewTicker(3 * time.Second)
 	for range ticker.C {
-		// Only leader monitors health
 		if o.raft.State() != raft.Leader {
 			continue
 		}
@@ -324,10 +307,9 @@ func (o *Orchestrator) monitorHealth() {
 }
 
 func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
-	// Apply removal through Raft
 	o.applyCommand(CmdRemoveNode, RemoveNodePayload{NodeId: deadNodeId})
 
-	// Reconfigure neighbors (simplified - you may need more logic here)
+	// Treba izboljsat
 	idx := -1
 	for i, id := range o.fsm.chainOrder {
 		if id == deadNodeId {
@@ -352,7 +334,6 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 			o.fsm.nodes[nextId].Reconfigure = true
 		}
 
-		// Update roles
 		if len(o.fsm.chainOrder) > 0 {
 			o.fsm.nodes[o.fsm.chainOrder[0]].Role = "head"
 			o.fsm.nodes[o.fsm.chainOrder[len(o.fsm.chainOrder)-1]].Role = "tail"

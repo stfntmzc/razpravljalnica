@@ -15,6 +15,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// primer za 3:
+// 1. go run cmd/orchestrator/main.go -id orch1 -p 8000 -rp 7000 -dir ./raft-data -bootstrap
+// 2. go run cmd/orchestrator/main.go -id orch2 -p 8001 -rp 7001 -dir ./raft-data -join localhost:8000
+// 3. go run cmd/orchestrator/main.go -id orch3 -p 8002 -rp 7002 -dir ./raft-data -join localhost:8000
+// trenutno je en bug da ce se ustvaris server in je port ze zaseden, potem melje v neskoncnost, v tem primeru je treba
+// restartat vse
+// bom popravo
+
 func main() {
 	nodeId := flag.String("id", "orch1", "orchestrator node ID")
 	grpcPort := flag.Int("p", 8000, "gRPC port")

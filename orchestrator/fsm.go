@@ -140,7 +140,6 @@ func (f *FSM) applyRemoveNode(payload json.RawMessage) interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Find and remove from chain
 	idx := -1
 	for i, id := range f.chainOrder {
 		if id == p.NodeId {

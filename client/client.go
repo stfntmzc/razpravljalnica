@@ -28,8 +28,8 @@ type ClientState struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	subscriptions map[int64]Subscription
-	orchClient    pb.OrchestratorClient
-	subConn       *grpc.ClientConn
+	orchClient    pb.OrchestratorClient // novo
+	subConn       *grpc.ClientConn      // novo mislim da
 	subCancel     context.CancelFunc
 }
 type Subscription struct {
@@ -287,7 +287,7 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 }
 
 func getSubscriptionNodeHandler(clientState *ClientState, args []string) {
-	fmt.Println("Ne rabima se zaj")
+	fmt.Println("Ne rabima")
 }
 
 func subscribtionHandler(clientState *ClientState, args []string) {
@@ -314,6 +314,7 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		topicIds = append(topicIds, id)
 	}
 
+	// to zdaj handla orchestrator
 	nodeResp, err := clientState.orchClient.GetSubscriptionNode(clientState.ctx, &pb.SubscriptionNodeRequest{
 		UserId:  clientState.user.Id,
 		TopicId: topicIds,
@@ -397,6 +398,8 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 // COMMANDS
 // =============================================
 
+// poveze se preko orchestratorja, ne preko serverja
+// na zacetku na login screenu je treba podati samo address od orchestratorja (ponavadi localhost:8000) in username
 func connectToServer(orchestratorAddr string, username string) (*ClientState, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
