@@ -15,11 +15,6 @@ func main() {
 	orchPtr := flag.String("orch", "localhost:8000", "orchestrator address")
 	flag.Parse()
 
-	if *uiPtr {
-		RunUI()
-		return
-	}
-
 	if *userPtr == "" {
 		fmt.Println("Username required! Use -u <username>")
 		os.Exit(1)
@@ -27,4 +22,3 @@ func main() {
 
 	client.Client(*orchPtr, *userPtr)
 }
-*/
