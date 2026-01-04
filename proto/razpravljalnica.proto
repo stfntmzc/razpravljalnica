@@ -210,6 +210,7 @@ service Orchestrator {
     rpc GetClusterState(google.protobuf.Empty) returns (GetClusterStateResponse);
     rpc GetSubscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
     rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+    rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse);
 }
 
 message RegisterNodeRequest {
@@ -233,4 +234,14 @@ message HeartbeatResponse {
     string new_next = 2;
     string new_prev = 3;
     string new_role = 4;
+}
+
+message JoinClusterRequest {
+    string node_id = 1;
+    string raft_address = 2;
+}
+
+message JoinClusterResponse {
+    bool success = 1;
+    string error = 2;
 }

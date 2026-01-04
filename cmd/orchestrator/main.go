@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"razpravljalnica/orchestrator"
+	pb "razpravljalnica/proto"
 	"syscall"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -15,7 +21,7 @@ func main() {
 	raftPort := flag.Int("rp", 7000, "Raft port")
 	raftDir := flag.String("dir", "./raft-data", "Raft data directory")
 	bootstrap := flag.Bool("bootstrap", false, "bootstrap new cluster")
-	joinAddr := flag.String("join", "", "address of leader to join")
+	joinAddr := flag.String("join", "", "gRPC address of leader to join")
 	flag.Parse()
 
 	grpcAddr := fmt.Sprintf("localhost:%d", *grpcPort)
@@ -30,8 +36,26 @@ func main() {
 
 	// Ce cluster ze obstaja
 	if *joinAddr != "" {
-		// TODO: se treba implementirat
-		fmt.Println("Se treba implementirat")
+		time.Sleep(1 * time.Second)
+
+		conn, err := grpc.NewClient(*joinAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			panic(err)
+		}
+		defer conn.Close()
+
+		client := pb.NewOrchestratorClient(conn)
+		resp, err := client.JoinCluster(context.Background(), &pb.JoinClusterRequest{
+			NodeId:      *nodeId,
+			RaftAddress: raftAddr,
+		})
+		if err != nil {
+			panic(err)
+		}
+		if !resp.Success {
+			panic(fmt.Sprintf("failed to join: %s", resp.Error))
+		}
+		fmt.Printf("Successfully joined cluster via %s\n", *joinAddr)
 	}
 
 	quit := make(chan os.Signal, 1)

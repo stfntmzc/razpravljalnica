@@ -723,6 +723,7 @@ const (
 	Orchestrator_GetClusterState_FullMethodName     = "/razpravljalnica.Orchestrator/GetClusterState"
 	Orchestrator_GetSubscriptionNode_FullMethodName = "/razpravljalnica.Orchestrator/GetSubscriptionNode"
 	Orchestrator_VerifyToken_FullMethodName         = "/razpravljalnica.Orchestrator/VerifyToken"
+	Orchestrator_JoinCluster_FullMethodName         = "/razpravljalnica.Orchestrator/JoinCluster"
 )
 
 // OrchestratorClient is the client API for Orchestrator service.
@@ -734,6 +735,7 @@ type OrchestratorClient interface {
 	GetClusterState(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetClusterStateResponse, error)
 	GetSubscriptionNode(ctx context.Context, in *SubscriptionNodeRequest, opts ...grpc.CallOption) (*SubscriptionNodeResponse, error)
 	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
+	JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error)
 }
 
 type orchestratorClient struct {
@@ -794,6 +796,16 @@ func (c *orchestratorClient) VerifyToken(ctx context.Context, in *VerifyTokenReq
 	return out, nil
 }
 
+func (c *orchestratorClient) JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinClusterResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_JoinCluster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrchestratorServer is the server API for Orchestrator service.
 // All implementations must embed UnimplementedOrchestratorServer
 // for forward compatibility.
@@ -803,6 +815,7 @@ type OrchestratorServer interface {
 	GetClusterState(context.Context, *emptypb.Empty) (*GetClusterStateResponse, error)
 	GetSubscriptionNode(context.Context, *SubscriptionNodeRequest) (*SubscriptionNodeResponse, error)
 	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
+	JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error)
 	mustEmbedUnimplementedOrchestratorServer()
 }
 
@@ -827,6 +840,9 @@ func (UnimplementedOrchestratorServer) GetSubscriptionNode(context.Context, *Sub
 }
 func (UnimplementedOrchestratorServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method VerifyToken not implemented")
+}
+func (UnimplementedOrchestratorServer) JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinCluster not implemented")
 }
 func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
 func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
@@ -939,6 +955,24 @@ func _Orchestrator_VerifyToken_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Orchestrator_JoinCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinClusterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).JoinCluster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_JoinCluster_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).JoinCluster(ctx, req.(*JoinClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Orchestrator_ServiceDesc is the grpc.ServiceDesc for Orchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -965,6 +999,10 @@ var Orchestrator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "VerifyToken",
 			Handler:    _Orchestrator_VerifyToken_Handler,
+		},
+		{
+			MethodName: "JoinCluster",
+			Handler:    _Orchestrator_JoinCluster_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

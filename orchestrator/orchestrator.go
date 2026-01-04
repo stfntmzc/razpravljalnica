@@ -369,3 +369,29 @@ func generateToken() string {
 	}
 	return fmt.Sprintf("%x", b)
 }
+
+func (o *Orchestrator) JoinCluster(ctx context.Context, req *pb.JoinClusterRequest) (*pb.JoinClusterResponse, error) {
+	if o.raft.State() != raft.Leader {
+		return &pb.JoinClusterResponse{
+			Success: false,
+			Error:   "not the leader",
+		}, nil
+	}
+
+	future := o.raft.AddVoter(
+		raft.ServerID(req.NodeId),
+		raft.ServerAddress(req.RaftAddress),
+		0, 0,
+	)
+
+	if err := future.Error(); err != nil {
+		return &pb.JoinClusterResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	fmt.Printf("Node %s joined cluster at %s\n", req.NodeId, req.RaftAddress)
+
+	return &pb.JoinClusterResponse{Success: true}, nil
+}
