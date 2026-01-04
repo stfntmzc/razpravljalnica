@@ -11,11 +11,8 @@ import (
 )
 
 func main() {
-	userPtr := flag.String("u", "", "user")
-	serverPtr := flag.String("s", "localhost", "server")
-	portPtrHead := flag.Int("h", 9876, "port number")
-	portPtrTail := flag.Int("t", 9879, "port number")
-	uiPtr := flag.Bool("g", false, "run ui instad of cli")
+	userPtr := flag.String("u", "", "username")
+	orchPtr := flag.String("orch", "localhost:8000", "orchestrator address")
 	flag.Parse()
 
 	if *uiPtr {
@@ -24,21 +21,10 @@ func main() {
 	}
 
 	if *userPtr == "" {
-		fmt.Println("Uporaba uporabniškega imena je obvezna! Uporabite -u <uporabniško_ime> [-s server_url] [-h head_port] [-t head_port]")
+		fmt.Println("Username required! Use -u <username>")
 		os.Exit(1)
 	}
 
-	urlHead := fmt.Sprintf("%s:%v", *serverPtr, *portPtrHead)
-	urlTail := fmt.Sprintf("%s:%v", *serverPtr, *portPtrTail)
-	client.Client(*userPtr, urlHead, urlTail)
-
-	return
-}
-
-/*
-package main
-
-func main() {
-	RunUI()
+	client.Client(*orchPtr, *userPtr)
 }
 */

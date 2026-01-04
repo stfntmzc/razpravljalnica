@@ -31,7 +31,7 @@ var wg sync.WaitGroup
 
 type MessageBoardServer struct {
 	pb.UnimplementedMessageBoardServer
-	id            int64
+	id            string
 	url           string
 	mu            sync.RWMutex
 	topics        map[int64]*pb.Topic
@@ -47,10 +47,12 @@ type MessageBoardServer struct {
 	subscriptions      map[string]subscriptionInfo // token -> informacije o neki naročnini. tudo to rabi samo head
 	nextSeqNum         int64
 	// replikacija
-	isHead   bool
-	isTail   bool
-	nodeNext *adjacentNode
-	nodePrev *adjacentNode
+	isHead     bool
+	isTail     bool
+	nodeNext   *adjacentNode
+	nodePrev   *adjacentNode
+	nodeId     string
+	orchClient pb.OrchestratorClient
 }
 
 type subscriptionInfo struct {
@@ -65,7 +67,7 @@ type adjacentNode struct {
 	cancel context.CancelFunc
 }
 
-func newMessageBoardServer(url string, id int64, isHead bool, isTail bool) *MessageBoardServer {
+func newMessageBoardServer(url string, id string, isHead bool, isTail bool) *MessageBoardServer {
 	return &MessageBoardServer{
 		id:                 id,
 		url:                url,
@@ -147,19 +149,34 @@ func (server *MessageBoardServer) connectToNode(url string, direction bool) erro
 // MESSAGEBOARD SERVER
 // =============================================
 
-func StartServer(url string, id int64, urlNext string, urlPrev string, isHead bool, isTail bool) {
-	if isHead {
-		fmt.Printf("Starting head node on %s ...\n", url)
-	} else if isTail {
-		fmt.Printf("Starting tail node on %s ...\n", url)
-	} else {
-		fmt.Printf("Starting normal node on %s ...\n", url)
+func StartServer(url string, orchestratorAddr string) {
+
+	orchConn, err := grpc.NewClient(orchestratorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		panic(err)
 	}
+	orchClient := pb.NewOrchestratorClient(orchConn)
+
+	resp, err := orchClient.RegisterNode(context.Background(), &pb.RegisterNodeRequest{
+		Address: url,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// avtomatsko dodeli role
+
+	isHead := resp.Role == "head"
+	isTail := resp.Role == "tail"
+
+	fmt.Printf("Registered as %s (role: %s)\n", resp.NodeId, resp.Role)
+
 	// pripravimo grpc strežnik
 	grpcServer := grpc.NewServer()
 
 	// registreramo servis (message board)
-	messageBoardServer := newMessageBoardServer(url, id, isHead, isTail)
+	messageBoardServer := newMessageBoardServer(url, resp.NodeId, isHead, isTail)
+	messageBoardServer.orchClient = orchClient
 	pb.RegisterMessageBoardServer(grpcServer, messageBoardServer)
 	// odpremo port
 	listener, err := net.Listen("tcp", url)
@@ -167,42 +184,26 @@ func StartServer(url string, id int64, urlNext string, urlPrev string, isHead bo
 		panic(err)
 	}
 
-	// povežemo se na next
-	if !isTail {
-		wg.Add(1)
+	// tudi avtomatsko dodeli sosede
+	if resp.NextAddress != "" {
 		go func() {
-			defer wg.Done()
-			err = messageBoardServer.connectToNode(urlNext, true)
-			if err != nil {
-				panic(err)
-			}
+			messageBoardServer.connectToNode(resp.NextAddress, true)
 		}()
 	}
-	// povežemo se na previous
-	if !isHead {
-		wg.Add(1)
+	if resp.PrevAddress != "" {
 		go func() {
-			defer wg.Done()
-			err = messageBoardServer.connectToNode(urlPrev, false)
-			if err != nil {
-				panic(err)
-			}
+			messageBoardServer.connectToNode(resp.PrevAddress, false)
 		}()
 	}
 
-	// TODO da se ta seznam in vse v zvezi s temi nodei naredi avtomatsko
-	// seznam node-ov
-	if isHead {
-		messageBoardServer.subscribersPerNode["2"] = 0
-		messageBoardServer.subscribersPerNode["3"] = 0
-	}
+	// zacne posiljat heartbeat za monitoring
+	go messageBoardServer.heartbeatLoop()
 
 	fmt.Printf("gRPC server listening at %v\n", url)
 	// začnemo s streženjem
 	if err := grpcServer.Serve(listener); err != nil {
 		panic(err)
 	}
-
 }
 
 // =============================================
@@ -465,7 +466,7 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 }
 
 // subscribe stvari
-// TODO : da je to avtomatsko
+// TODO: da je to avtomatsko
 // zaenkrat
 var nodeAdresses = map[string]string{
 	// nodeID -> address
@@ -547,7 +548,7 @@ func (server *MessageBoardServer) getLeastSubscribersNodeId() (string, bool) {
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
 
 	// preverimo token
-	tokenVerificationReq := &pb.VerifyTokenRequest{
+	tokenResp, err := server.orchClient.VerifyToken(context.Background(), &pb.VerifyTokenRequest{
 		Token:  req.SubscribeToken,
 		UserId: req.UserId,
 	}
@@ -672,6 +673,48 @@ func (server *MessageBoardServer) GetUser(ctx context.Context, req *pb.GetUserRe
 		Name: user.Name,
 		Id:   user.Id,
 	}, nil
+func (server *MessageBoardServer) heartbeatLoop() {
+	ticker := time.NewTicker(1 * time.Second)
+
+	for range ticker.C {
+		// DEBUG: fmt.Println("Sending heartbeat...")
+
+		server.subscribersMu.RLock()
+		subCount := int32(0)
+
+		for _, subs := range server.subscribers {
+			subCount += int32(len(subs))
+		}
+		server.subscribersMu.RUnlock()
+
+		resp, err := server.orchClient.Heartbeat(context.Background(), &pb.HeartbeatRequest{
+			NodeId:          server.id,
+			SubscriberCount: subCount,
+		})
+
+		if err != nil {
+			fmt.Println("Heartbeat failed", err)
+			continue
+		}
+
+		if resp.Reconfigure {
+			server.reconfigure(resp)
+		}
+	}
+}
+
+func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
+	fmt.Printf("Reconfiguring: role=%s, next=%s, prev=%s\n", resp.NewRole, resp.NewNext, resp.NewPrev)
+
+	server.isHead = resp.NewRole == "head"
+	server.isTail = resp.NewRole == "tail"
+
+	if resp.NewNext != "" {
+		go server.connectToNode(resp.NewNext, true)
+	}
+	if resp.NewPrev != "" {
+		go server.connectToNode(resp.NewPrev, false)
+	}
 }
 
 // MESSAGEBOARD SERVER FUNKCIJE
