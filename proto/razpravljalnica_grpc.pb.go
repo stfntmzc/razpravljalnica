@@ -35,7 +35,6 @@ const (
 	MessageBoard_TestConnection_FullMethodName      = "/razpravljalnica.MessageBoard/TestConnection"
 	MessageBoard_VerifyToken_FullMethodName         = "/razpravljalnica.MessageBoard/VerifyToken"
 	MessageBoard_ExpireSubscription_FullMethodName  = "/razpravljalnica.MessageBoard/ExpireSubscription"
-	MessageBoard_GetUser_FullMethodName             = "/razpravljalnica.MessageBoard/GetUser"
 )
 
 // MessageBoardClient is the client API for MessageBoard service.
@@ -69,8 +68,6 @@ type MessageBoardClient interface {
 	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
 	// za brisanje subscriptiona na headu
 	ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// za dobivanje usernamea
-	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*User, error)
 }
 
 type messageBoardClient struct {
@@ -220,16 +217,6 @@ func (c *messageBoardClient) ExpireSubscription(ctx context.Context, in *ExpireS
 	return out, nil
 }
 
-func (c *messageBoardClient) GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*User, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(User)
-	err := c.cc.Invoke(ctx, MessageBoard_GetUser_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // MessageBoardServer is the server API for MessageBoard service.
 // All implementations must embed UnimplementedMessageBoardServer
 // for forward compatibility.
@@ -261,8 +248,6 @@ type MessageBoardServer interface {
 	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
 	// za brisanje subscriptiona na headu
 	ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error)
-	// za dobivanje usernamea
-	GetUser(context.Context, *GetUserRequest) (*User, error)
 	mustEmbedUnimplementedMessageBoardServer()
 }
 
@@ -311,9 +296,6 @@ func (UnimplementedMessageBoardServer) VerifyToken(context.Context, *VerifyToken
 }
 func (UnimplementedMessageBoardServer) ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExpireSubscription not implemented")
-}
-func (UnimplementedMessageBoardServer) GetUser(context.Context, *GetUserRequest) (*User, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
 }
 func (UnimplementedMessageBoardServer) mustEmbedUnimplementedMessageBoardServer() {}
 func (UnimplementedMessageBoardServer) testEmbeddedByValue()                      {}
@@ -563,24 +545,6 @@ func _MessageBoard_ExpireSubscription_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MessageBoard_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetUserRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MessageBoardServer).GetUser(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MessageBoard_GetUser_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessageBoardServer).GetUser(ctx, req.(*GetUserRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // MessageBoard_ServiceDesc is the grpc.ServiceDesc for MessageBoard service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -635,10 +599,6 @@ var MessageBoard_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExpireSubscription",
 			Handler:    _MessageBoard_ExpireSubscription_Handler,
-		},
-		{
-			MethodName: "GetUser",
-			Handler:    _MessageBoard_GetUser_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
