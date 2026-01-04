@@ -3,3 +3,5 @@
 
 # IDE datoteke
 .vscode/
+raft-data/
+raft-data/orch1/

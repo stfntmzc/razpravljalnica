@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math/rand"
 	"net"
 	pb "razpravljalnica/proto"
 	"time"
@@ -30,6 +31,8 @@ var wg sync.WaitGroup
 
 type MessageBoardServer struct {
 	pb.UnimplementedMessageBoardServer
+	id            string
+	url           string
 	mu            sync.RWMutex
 	topics        map[int64]*pb.Topic
 	nextTopicID   int64
@@ -37,37 +40,52 @@ type MessageBoardServer struct {
 	nextMessageID int64
 	users         map[int64]*pb.User
 	nextUserID    int64
-	subscribers   map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
-	subscribersMu sync.RWMutex
-	nextSeqNum    int64
+	// subscribe stvari
+	subscribers        map[int64][]chan *pb.MessageEvent // map vseh subscriberjev
+	subscribersMu      sync.RWMutex
+	subscribersPerNode map[string]int64            // kolk je subscriberjov na posamznem nodeu. sicer ga rabi samo head, ampak zaenkrat tkole
+	subscriptions      map[string]subscriptionInfo // token -> informacije o neki naročnini. tudo to rabi samo head
+	nextSeqNum         int64
 	// replikacija
-	isHead   bool
-	isTail   bool
-	nodeNext *adjacentNode
-	nodePrev *adjacentNode
+	isHead     bool
+	isTail     bool
+	nodeNext   *adjacentNode
+	nodePrev   *adjacentNode
+	nodeId     string
+	orchClient pb.OrchestratorClient
 }
 
-func newMessageBoardServer(isHead bool, isTail bool) *MessageBoardServer {
-	return &MessageBoardServer{
-		topics:        make(map[int64]*pb.Topic, 0),
-		nextTopicID:   1,
-		messages:      make(map[int64]*pb.Message, 0),
-		nextMessageID: 1,
-		users:         make(map[int64]*pb.User, 0),
-		nextUserID:    1,
-		subscribers:   make(map[int64][]chan *pb.MessageEvent),
-		nextSeqNum:    1,
-		isHead:        isHead,
-		isTail:        isTail,
-		nodeNext:      nil,
-		nodePrev:      nil,
-	}
+type subscriptionInfo struct {
+	userId  int64
+	nodeId  string
+	topicId int64
 }
 
 type adjacentNode struct {
 	conn   *grpc.ClientConn
 	rpc    pb.MessageBoardClient
 	cancel context.CancelFunc
+}
+
+func newMessageBoardServer(url string, id string, isHead bool, isTail bool) *MessageBoardServer {
+	return &MessageBoardServer{
+		id:                 id,
+		url:                url,
+		topics:             make(map[int64]*pb.Topic, 0),
+		nextTopicID:        1,
+		messages:           make(map[int64]*pb.Message, 0),
+		nextMessageID:      1,
+		users:              make(map[int64]*pb.User, 0),
+		nextUserID:         1,
+		subscribers:        make(map[int64][]chan *pb.MessageEvent),
+		nextSeqNum:         1,
+		subscribersPerNode: make(map[string]int64),            // kolk je subscriberjov na posamznem nodeu. sicer ga rabi samo head, ampak zaenkrat tkole
+		subscriptions:      make(map[string]subscriptionInfo), // token -> informacije o neki naročnini. tudo to rabi samo head
+		isHead:             isHead,
+		isTail:             isTail,
+		nodeNext:           nil,
+		nodePrev:           nil,
+	}
 }
 
 func getAdjacentNode(url string) (*adjacentNode, error) {
@@ -131,19 +149,34 @@ func (server *MessageBoardServer) connectToNode(url string, direction bool) erro
 // MESSAGEBOARD SERVER
 // =============================================
 
-func StartServer(url string, urlNext string, urlPrev string, isHead bool, isTail bool) {
-	if isHead {
-		fmt.Printf("Starting head node on %s ...\n", url)
-	} else if isTail {
-		fmt.Printf("Starting tail node on %s ...\n", url)
-	} else {
-		fmt.Printf("Starting normal node on %s ...\n", url)
+func StartServer(url string, orchestratorAddr string) {
+
+	orchConn, err := grpc.NewClient(orchestratorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		panic(err)
 	}
+	orchClient := pb.NewOrchestratorClient(orchConn)
+
+	resp, err := orchClient.RegisterNode(context.Background(), &pb.RegisterNodeRequest{
+		Address: url,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// avtomatsko dodeli role
+
+	isHead := resp.Role == "head"
+	isTail := resp.Role == "tail"
+
+	fmt.Printf("Registered as %s (role: %s)\n", resp.NodeId, resp.Role)
+
 	// pripravimo grpc strežnik
 	grpcServer := grpc.NewServer()
 
 	// registreramo servis (message board)
-	messageBoardServer := newMessageBoardServer(isHead, isTail)
+	messageBoardServer := newMessageBoardServer(url, resp.NodeId, isHead, isTail)
+	messageBoardServer.orchClient = orchClient
 	pb.RegisterMessageBoardServer(grpcServer, messageBoardServer)
 	// odpremo port
 	listener, err := net.Listen("tcp", url)
@@ -151,43 +184,30 @@ func StartServer(url string, urlNext string, urlPrev string, isHead bool, isTail
 		panic(err)
 	}
 
-	// povežemo se na next
-	if !isTail {
-		wg.Add(1)
+	// tudi avtomatsko dodeli sosede
+	if resp.NextAddress != "" {
 		go func() {
-			defer wg.Done()
-			err = messageBoardServer.connectToNode(urlNext, true)
-			if err != nil {
-				panic(err)
-			}
+			messageBoardServer.connectToNode(resp.NextAddress, true)
 		}()
 	}
-	// povežemo se na previous
-	if !isHead {
-		wg.Add(1)
+	if resp.PrevAddress != "" {
 		go func() {
-			defer wg.Done()
-			err = messageBoardServer.connectToNode(urlPrev, false)
-			if err != nil {
-				panic(err)
-			}
+			messageBoardServer.connectToNode(resp.PrevAddress, false)
 		}()
 	}
+
+	// zacne posiljat heartbeat za monitoring
+	go messageBoardServer.heartbeatLoop()
 
 	fmt.Printf("gRPC server listening at %v\n", url)
 	// začnemo s streženjem
 	if err := grpcServer.Serve(listener); err != nil {
 		panic(err)
 	}
-
 }
 
 // =============================================
 // MESSAGEBOARD SERVER FUNKCIJE
-
-// TODO
-// v vseh teh funkcijah, kjer se kej piše mora potem poslat spremembe svojemu nasledniku
-// če je server tail, mora potrdit zapis, in poslat potrdilo svojemu predhodniku
 
 func (server *MessageBoardServer) TestConnection(ctx context.Context, req *emptypb.Empty) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
@@ -196,9 +216,9 @@ func (server *MessageBoardServer) TestConnection(ctx context.Context, req *empty
 func (server *MessageBoardServer) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.CreateTopic(ctx, req)
-		
+
 		if err != nil {
-			return nil, err 
+			return nil, err
 		}
 	}
 
@@ -232,9 +252,9 @@ func (server *MessageBoardServer) CreateUser(ctx context.Context, req *pb.Create
 
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.CreateUser(ctx, req)
-		
+
 		if err != nil {
-			return nil, err 
+			return nil, err
 		}
 	}
 
@@ -267,7 +287,7 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.PostMessage(ctx, req)
 		if err != nil {
-			return nil, err  
+			return nil, err
 		}
 	}
 
@@ -308,12 +328,12 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 }
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
-	
+
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.UpdateMessage(ctx, req)
-		
+
 		if err != nil {
-			return nil, err 
+			return nil, err
 		}
 	}
 
@@ -337,9 +357,9 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.DeleteMessage(ctx, req)
-		
+
 		if err != nil {
-			return nil, err 
+			return nil, err
 		}
 	}
 
@@ -362,15 +382,14 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.LikeMessage(ctx, req)
-		
+
 		if err != nil {
-			return nil, err 
+			return nil, err
 		}
 	}
 
 	server.mu.Lock()
 	defer server.mu.Unlock()
-
 
 	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
 	topic_id := req.TopicId
@@ -410,7 +429,7 @@ func (server *MessageBoardServer) ListTopics(ctx context.Context, req *emptypb.E
 }
 
 func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMessagesRequest) (*pb.GetMessagesResponse, error) {
-	// isto tu, smo na tailu 
+	// isto tu, smo na tailu
 	server.mu.RLock()
 	defer server.mu.RUnlock()
 
@@ -438,12 +457,97 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 }
 
 // subscribe stvari
+// TODO: da je to avtomatsko
+// zaenkrat
+var nodeAdresses = map[string]string{
+	// nodeID -> address
+	"1": "localhost:9876",
+	"2": "localhost:9877",
+	"3": "localhost:9878",
+	"4": "localhost:9879",
+}
+
 func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *pb.SubscriptionNodeRequest) (*pb.SubscriptionNodeResponse, error) {
-	fmt.Println("GetSubscriptionNode not implemented")
-	return nil, nil
+	if !server.isHead {
+		return nil, fmt.Errorf("can't request subscription node from non-head node")
+	}
+	// preverimo če topic obstaja
+	_, ok := server.topics[req.TopicId[0]]
+	if !ok {
+		return nil, fmt.Errorf("topic with id %d doesn't exist", req.TopicId[0])
+	}
+
+	nodeId, ok := server.getLeastSubscribersNodeId()
+	if !ok {
+		return nil, fmt.Errorf("no nodes available")
+	}
+	token := server.generateToken()
+	res := &pb.SubscriptionNodeResponse{
+		SubscribeToken: token,
+		Node: &pb.NodeInfo{
+			NodeId:  nodeId,
+			Address: nodeAdresses[nodeId],
+		},
+	}
+
+	fmt.Printf("New subscription (unverefied): %s\n", res)
+	server.mu.Lock()
+	defer server.mu.Unlock()
+
+	subInfo := server.subscriptions[token]
+	subInfo.userId = req.UserId
+	subInfo.topicId = req.TopicId[0]
+	subInfo.nodeId = nodeId
+	server.subscriptions[token] = subInfo
+	server.subscribersPerNode[nodeId]++
+
+	return res, nil
+}
+
+// pomožna
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func (server *MessageBoardServer) generateToken() string {
+	b := make([]rune, 16)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
+// pomožna
+func (server *MessageBoardServer) getLeastSubscribersNodeId() (string, bool) {
+	first := true
+	var minSubs int64
+	var minId string
+	for nodeId, count := range server.subscribersPerNode {
+		if first || count < minSubs {
+			minId = nodeId
+			minSubs = count
+			first = false
+		}
+	}
+
+	if first {
+		// mapa je prazna
+		return "", false
+	}
+
+	return minId, true
 }
 
 func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, stream grpc.ServerStreamingServer[pb.MessageEvent]) error {
+
+	// preverimo token
+	tokenResp, err := server.orchClient.VerifyToken(context.Background(), &pb.VerifyTokenRequest{
+		Token:  req.SubscribeToken,
+		UserId: req.UserId,
+	})
+	if err != nil || !tokenResp.Valid {
+		return fmt.Errorf("invalid token")
+	}
+
+	// token je ok, nadaljujemo
 
 	ch := make(chan *pb.MessageEvent, 100)
 
@@ -463,11 +567,13 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 					break
 				}
 			}
+			fmt.Printf("USER [%d] UNSUBSCRIBED FROM TOPIC [%d]\n", req.UserId, req.TopicId[0])
 		}
 		server.subscribersMu.Unlock()
 		close(ch)
 	}()
 
+	fmt.Printf("NEW SUBSCRIBER [%d] TO TOPIC [%d]\n", req.UserId, req.TopicId[0])
 	for {
 		select {
 		case event := <-ch:
@@ -478,6 +584,44 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 			return nil
 		}
 	}
+}
+
+func (server *MessageBoardServer) VerifyToken(ctx context.Context, req *pb.VerifyTokenRequest) (*pb.VerifyTokenResponse, error) {
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+	if server.isHead {
+		var status bool = false
+		subInfo, ok := server.subscriptions[req.Token]
+		if ok && subInfo.userId == req.UserId {
+			status = true
+		}
+		fmt.Printf("Subscription %s authorised\n", req.Token)
+		return &pb.VerifyTokenResponse{
+			Valid: status,
+		}, nil
+	}
+	return server.nodePrev.rpc.VerifyToken(ctx, req)
+}
+
+func (server *MessageBoardServer) ExpireSubscription(ctx context.Context, req *pb.ExpireSubscriptionRequest) (*emptypb.Empty, error) {
+	if !server.isHead {
+		return nil, fmt.Errorf("Non head node")
+	}
+	server.mu.RLock()
+	subInfo, ok := server.subscriptions[req.Token]
+	server.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("Invalid token")
+	}
+	if subInfo.userId != req.UserId {
+		return nil, fmt.Errorf("Wrong user")
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	server.subscribersPerNode[subInfo.nodeId]--
+	delete(server.subscriptions, req.Token)
+	fmt.Printf("USER [%d] %s UNSUBSCRIBED FROM TOPIC [%d] ON NODE %s\n", req.UserId, server.users[req.UserId].Name, server.subscriptions[req.Token].topicId, subInfo.nodeId)
+	return nil, nil
 }
 
 // helper funkcija
@@ -499,6 +643,50 @@ func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb
 		}
 	}
 	server.subscribersMu.RUnlock()
+}
+
+func (server *MessageBoardServer) heartbeatLoop() {
+	ticker := time.NewTicker(1 * time.Second)
+
+	for range ticker.C {
+		// DEBUG: fmt.Println("Sending heartbeat...")
+
+		server.subscribersMu.RLock()
+		subCount := int32(0)
+
+		for _, subs := range server.subscribers {
+			subCount += int32(len(subs))
+		}
+		server.subscribersMu.RUnlock()
+
+		resp, err := server.orchClient.Heartbeat(context.Background(), &pb.HeartbeatRequest{
+			NodeId:          server.id,
+			SubscriberCount: subCount,
+		})
+
+		if err != nil {
+			fmt.Println("Heartbeat failed", err)
+			continue
+		}
+
+		if resp.Reconfigure {
+			server.reconfigure(resp)
+		}
+	}
+}
+
+func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
+	fmt.Printf("Reconfiguring: role=%s, next=%s, prev=%s\n", resp.NewRole, resp.NewNext, resp.NewPrev)
+
+	server.isHead = resp.NewRole == "head"
+	server.isTail = resp.NewRole == "tail"
+
+	if resp.NewNext != "" {
+		go server.connectToNode(resp.NewNext, true)
+	}
+	if resp.NewPrev != "" {
+		go server.connectToNode(resp.NewPrev, false)
+	}
 }
 
 // MESSAGEBOARD SERVER FUNKCIJE

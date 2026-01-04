@@ -20,32 +20,40 @@ import (
 
 type CommandHandler func(clientState *ClientState, args []string)
 type ClientState struct {
-	connHead *grpc.ClientConn
-	rpcHead  pb.MessageBoardClient
-	connTail *grpc.ClientConn
-	rpcTail  pb.MessageBoardClient
-	user     *pb.User
-	ctx      context.Context
-	cancel   context.CancelFunc
-	subCancel context.CancelFunc
+	connHead      *grpc.ClientConn
+	rpcHead       pb.MessageBoardClient
+	connTail      *grpc.ClientConn
+	rpcTail       pb.MessageBoardClient
+	user          *pb.User
+	ctx           context.Context
+	cancel        context.CancelFunc
+	subscriptions map[int64]Subscription
+	orchClient    pb.OrchestratorClient // novo
+	subConn       *grpc.ClientConn      // novo mislim da
+	subCancel     context.CancelFunc
+}
+type Subscription struct {
+	connSub   *grpc.ClientConn
+	rpcSub    pb.MessageBoardClient
+	cancelSub context.CancelFunc
+	token     string
 }
 
 // mapa komand
 var commands = map[string]CommandHandler{}
 
-func Client(urlHead string, urlTail string, username string) {
+func Client(orchestratorAddr string, username string) {
 
 	// inicializacija mape komand
 	initCommandHandlers()
 
 	// povežemo se na strežnik
-	clientState, err := connectToServer(urlHead, urlTail, username)
+	clientState, err := connectToServer(orchestratorAddr, username)
 	if err != nil {
 		panic(err)
 	}
 	defer clientState.connHead.Close()
 	defer clientState.connTail.Close()
-	fmt.Printf("Connected to servers: head=%s, tail=%s\n", urlHead, urlTail)
 
 	// main loop
 	scanner := bufio.NewScanner(os.Stdin)
@@ -66,7 +74,6 @@ func Client(urlHead string, urlTail string, username string) {
 			//fmt.Println("ukaz:", line)
 			handleInput(clientState, line)
 		}
-
 	}
 }
 
@@ -280,7 +287,7 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 }
 
 func getSubscriptionNodeHandler(clientState *ClientState, args []string) {
-	fmt.Println("Ne rabima se zaj")
+	fmt.Println("Ne rabima")
 }
 
 func subscribtionHandler(clientState *ClientState, args []string) {
@@ -288,10 +295,14 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		fmt.Println("Usage: /subscribe <topic_id> [topic_id2] ...")
 		return
 	}
+
 	if clientState.subCancel != nil {
 		clientState.subCancel()
 	}
-	
+	if clientState.subConn != nil {
+		clientState.subConn.Close()
+	}
+
 	var topicIds []int64
 	for _, arg := range args {
 		var id int64
@@ -303,18 +314,38 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		topicIds = append(topicIds, id)
 	}
 
-	subCtx, subCancel := context.WithCancel(clientState.ctx)
-	clientState.subCancel = subCancel
-	
-	req := &pb.SubscribeTopicRequest{
-		TopicId: topicIds,
+	// to zdaj handla orchestrator
+	nodeResp, err := clientState.orchClient.GetSubscriptionNode(clientState.ctx, &pb.SubscriptionNodeRequest{
 		UserId:  clientState.user.Id,
+		TopicId: topicIds,
+	})
+	if err != nil {
+		fmt.Println("Error getting subscription node:", err)
+		return
 	}
 
-	stream, err := clientState.rpcHead.SubscribeTopic(subCtx, req)
+	fmt.Printf("Assigned to node %s at %s\n", nodeResp.Node.NodeId, nodeResp.Node.Address)
+
+	subConn, err := grpc.NewClient(nodeResp.Node.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Println("Error connecting to subscription node:", err)
+		return
+	}
+	clientState.subConn = subConn
+	subClient := pb.NewMessageBoardClient(subConn)
+
+	subCtx, subCancel := context.WithCancel(clientState.ctx)
+	clientState.subCancel = subCancel
+
+	stream, err := subClient.SubscribeTopic(subCtx, &pb.SubscribeTopicRequest{
+		TopicId:        topicIds,
+		UserId:         clientState.user.Id,
+		SubscribeToken: nodeResp.SubscribeToken,
+	})
 	if err != nil {
 		fmt.Println("Error subscribing:", err)
 		subCancel()
+		subConn.Close()
 		return
 	}
 
@@ -324,6 +355,9 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 		for {
 			event, err := stream.Recv()
 			if err != nil {
+				if subCtx.Err() == context.Canceled {
+					return
+				}
 				fmt.Println("\nSubscription ended:", err)
 				return
 			}
@@ -354,48 +388,56 @@ func unsubscribeHandler(clientState *ClientState, args []string) {
 	}
 	clientState.subCancel()
 	clientState.subCancel = nil
+	if clientState.subConn != nil {
+		clientState.subConn.Close()
+		clientState.subConn = nil
+	}
 	fmt.Println("Unsubscribed")
 }
 
 // COMMANDS
 // =============================================
 
-func connectToServer(urlHead string, urlTail string, username string) (*ClientState, error) {
-
-	// konteks, funkcija za ugasnt
+// poveze se preko orchestratorja, ne preko serverja
+// na zacetku na login screenu je treba podati samo address od orchestratorja (ponavadi localhost:8000) in username
+func connectToServer(orchestratorAddr string, username string) (*ClientState, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	// povezave
-	connHead, err := grpc.NewClient(urlHead, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	// connectas na orchestrator
+	orchConn, err := grpc.NewClient(orchestratorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	connTail, err := grpc.NewClient(urlTail, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	orchClient := pb.NewOrchestratorClient(orchConn)
+
+	// dobis cluster state
+	clusterState, err := orchClient.GetClusterState(ctx, &emptypb.Empty{})
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to get cluster state: %v", err)
+	}
+
+	fmt.Printf("Head: %s, Tail: %s\n", clusterState.Head.Address, clusterState.Tail.Address)
+
+	// connectas na head
+	connHead, err := grpc.NewClient(clusterState.Head.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	// client, uporabnik
 	clientHead := pb.NewMessageBoardClient(connHead)
+
+	// connectas na tail
+	connTail, err := grpc.NewClient(clusterState.Tail.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		connHead.Close()
+		cancel()
+		return nil, err
+	}
 	clientTail := pb.NewMessageBoardClient(connTail)
-	// testiramo povezave
-	err = testConnection(clientHead, ctx)
-	if err != nil {
-		connHead.Close()
-		connTail.Close()
-		cancel()
-		return nil, err
-	}
-	fmt.Printf("Succsessfuly connected to head: %s\n", urlHead)
-	err = testConnection(clientTail, ctx)
-	if err != nil {
-		connHead.Close()
-		connTail.Close()
-		cancel()
-		return nil, err
-	}
-	fmt.Printf("Succsessfuly connected to tail: %s\n", urlTail)
-	// registreramo clienta samo na headu
+
+	// registriras userja na head
 	user, err := clientHead.CreateUser(ctx, &pb.CreateUserRequest{Name: username})
 	if err != nil {
 		connHead.Close()
@@ -404,14 +446,17 @@ func connectToServer(urlHead string, urlTail string, username string) (*ClientSt
 		return nil, err
 	}
 
+	fmt.Printf("Logged in as %s (id: %d)\n", user.Name, user.Id)
+
 	return &ClientState{
-		connHead: connHead,
-		rpcHead:  clientHead,
-		connTail: connTail,
-		rpcTail:  clientTail,
-		user:     user,
-		ctx:      ctx,
-		cancel:   cancel,
+		connHead:   connHead,
+		rpcHead:    clientHead,
+		connTail:   connTail,
+		rpcTail:    clientTail,
+		user:       user,
+		ctx:        ctx,
+		cancel:     cancel,
+		orchClient: orchClient,
 	}, nil
 }
 
