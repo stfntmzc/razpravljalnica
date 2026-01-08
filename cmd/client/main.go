@@ -13,6 +13,7 @@ import (
 func main() {
 	userPtr := flag.String("u", "", "username")
 	orchPtr := flag.String("orch", "localhost:8000", "orchestrator address")
+	uiPtr := flag.Bool("tui", false, "use tui")
 	flag.Parse()
 
 	if *uiPtr {
@@ -27,4 +28,3 @@ func main() {
 
 	client.Client(*orchPtr, *userPtr)
 }
-*/

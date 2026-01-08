@@ -67,8 +67,8 @@ type model struct {
 	/*username string
 	urlHead  string
 	urlTail  string*/
-	inputs []textinput.Model
-	focus  int
+	loginInputs []textinput.Model
+	focus       int
 
 	tabs                []string
 	openTabIndex        int
@@ -149,23 +149,20 @@ type subscriptionEventMsg struct {
 }
 
 func initialModel() model {
-	inputs := make([]textinput.Model, 3)
+	loginInputs := make([]textinput.Model, 2)
 
 	// login text input
-	inputs[0] = textinput.New()
-	inputs[0].Placeholder = "Username"
-	inputs[0].Focus()
-	inputs[0].CharLimit = 32
+	loginInputs[0] = textinput.New()
+	loginInputs[0].Placeholder = "Username"
+	loginInputs[0].CharLimit = 16
+	loginInputs[0].Focus()
 
-	inputs[1] = textinput.New()
-	inputs[1].Placeholder = "Head node URL"
+	loginInputs[1] = textinput.New()
+	loginInputs[1].Placeholder = "Orchestrator URL"
+	loginInputs[1].CharLimit = 32
 
-	inputs[2] = textinput.New()
-	inputs[2].Placeholder = "Tail node URL"
-
-	inputs[0].Prompt = ""
-	inputs[1].Prompt = ""
-	inputs[2].Prompt = ""
+	loginInputs[0].Prompt = ""
+	loginInputs[1].Prompt = ""
 
 	// create topic text input
 	createTopicInput := textinput.New()
@@ -195,7 +192,7 @@ func initialModel() model {
 	messages := make(map[int64]client.UiMessageItem)
 
 	return model{
-		inputs:              inputs,
+		loginInputs:         loginInputs,
 		tabs:                tabs,
 		openTabIndex:        0,
 		topics:              make(map[int64]string),
@@ -216,6 +213,12 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+func (m model) closeConnections() {
+	m.client.clientState.ConnHead.Close()
+	m.client.clientState.ConnTail.Close()
+	client.UnsubscribeFromAll(m.client.clientState)
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !m.loggedIn {
 		switch msg := msg.(type) {
@@ -224,13 +227,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 
 			case "ctrl+c", "q":
-				client.UnsubscribeFromAll(m.client.clientState)
+				//client.UnsubscribeFromAll(m.client.clientState)
+				m.closeConnections()
 				m.quitting = true
 				return m, tea.Quit
 
 			case "down":
 				if !m.loggedIn {
-					m.focus = (m.focus + 1) % len(m.inputs)
+					m.focus = (m.focus + 1) % len(m.loginInputs)
 					m.updateFocus()
 				}
 
@@ -238,20 +242,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !m.loggedIn {
 					m.focus--
 					if m.focus < 0 {
-						m.focus = len(m.inputs) - 1
+						m.focus = len(m.loginInputs) - 1
 					}
 					m.updateFocus()
 				}
 
 			case "enter":
 				if !m.loggedIn {
-					if m.focus < len(m.inputs)-1 {
+					if m.focus < len(m.loginInputs)-1 {
 						// premik dol
 						m.focus++
 						m.updateFocus()
 					} else {
 						// grpc connect
-						return m, connectCmd(m.inputs[0].Value(), m.inputs[1].Value(), m.inputs[2].Value())
+						return m, connectCmd(m.loginInputs[1].Value(), m.loginInputs[0].Value())
 					}
 				}
 			}
@@ -267,7 +271,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, listTopicsCmd(m)
 		}
 		var cmd tea.Cmd
-		m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
+		m.loginInputs[m.focus], cmd = m.loginInputs[m.focus].Update(msg)
 		return m, cmd
 
 	} else {
@@ -392,7 +396,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.tabs[m.openTabIndex] == "Live chat" {
 				switch msg.String() {
 				case "q":
-					client.UnsubscribeFromAll(m.client.clientState)
+					//client.UnsubscribeFromAll(m.client.clientState)
+					m.closeConnections()
 					m.quitting = true
 					return m, tea.Quit
 				case "right":
@@ -511,7 +516,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				case "q":
-					client.UnsubscribeFromAll(m.client.clientState)
+					//client.UnsubscribeFromAll(m.client.clientState)
+					m.closeConnections()
 					m.quitting = true
 					return m, tea.Quit
 				case "l":
@@ -561,7 +567,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				switch msg.String() {
 				case "ctrl+c", "q":
-					client.UnsubscribeFromAll(m.client.clientState)
+					//client.UnsubscribeFromAll(m.client.clientState)
+					m.closeConnections()
 					m.quitting = true
 					return m, tea.Quit
 				case "c":
@@ -781,7 +788,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, listenForSubscriptionEvents(m.client.clientState)
 		}
 		var cmd tea.Cmd
-		m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
+		m.loginInputs[m.focus], cmd = m.loginInputs[m.focus].Update(msg)
 		return m, cmd
 	}
 
@@ -789,10 +796,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) updateFocus() {
-	for i := range m.inputs {
-		m.inputs[i].Blur()
+	for i := range m.loginInputs {
+		m.loginInputs[i].Blur()
 	}
-	m.inputs[m.focus].Focus()
+	m.loginInputs[m.focus].Focus()
 }
 
 func (m model) View() string {
@@ -827,12 +834,11 @@ func loginView(m model) string {
 	s := "Razpravljalnica\nLogin\n\n"
 
 	labels := []string{
-		"Username	",
-		"Head node url	",
-		"Tail node url	",
+		"Username		",
+		"Orchestrator URL	",
 	}
 
-	for i, input := range m.inputs {
+	for i, input := range m.loginInputs {
 		cursor := " "
 		if m.focus == i {
 			cursor = ">"
@@ -1141,7 +1147,7 @@ func buildContentSubscribeItems(m model) ([]string, map[int]int, map[int]int, ma
 		cursorFound := false
 		// tip opreacije, ime, topic, likes
 		opTypeString := item.OpType
-		userString := item.Username // TODO
+		userString := item.Username
 		topicString := m.topics[item.TopicId]
 		likesString := fmt.Sprintf("%d likes", item.Likes)
 		left := opTypeString + " by " + userString + " on topic " + topicString + ":"
@@ -1474,9 +1480,9 @@ func buildContentMessages(m model, messages []client.UiMessageItem) ([]string, m
 	}
 }*/
 
-func connectCmd(username string, head string, tail string) tea.Cmd {
+func connectCmd(orchestratorAddr string, username string) tea.Cmd {
 	return func() tea.Msg {
-		c, err := client.ClientUi(username, head, tail)
+		c, err := client.ClientUi(orchestratorAddr, username)
 		return connectResultMsg{
 			clientState: c,
 			err:         err,

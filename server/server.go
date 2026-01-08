@@ -551,14 +551,14 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 	tokenResp, err := server.orchClient.VerifyToken(context.Background(), &pb.VerifyTokenRequest{
 		Token:  req.SubscribeToken,
 		UserId: req.UserId,
-	}
+	})
 
-	tokenVerification, err := server.nodePrev.rpc.VerifyToken(context.Background(), tokenVerificationReq)
+	//tokenVerification, err := server.nodePrev.rpc.VerifyToken(context.Background(), tokenVerificationReq)
 	if err != nil {
 		fmt.Printf("SUBSCRIBE UNSUCCSESSFUL (ERROR): userId=%d\n", req.UserId)
 		return err
 	}
-	if !tokenVerification.Valid {
+	if !tokenResp.Valid {
 		fmt.Printf("SUBSCRIBE UNSUCCSESSFUL: userId=%d\n", req.UserId)
 		return fmt.Errorf("Invalid token")
 	}
@@ -673,6 +673,8 @@ func (server *MessageBoardServer) GetUser(ctx context.Context, req *pb.GetUserRe
 		Name: user.Name,
 		Id:   user.Id,
 	}, nil
+}
+
 func (server *MessageBoardServer) heartbeatLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 
