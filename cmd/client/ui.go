@@ -979,6 +979,7 @@ func getLiveChatView(m model) string {
 	//contentHeight := contentHeight - footerHeight - contnetPadddingTopBottom*2
 
 	if len(m.subscribeItems) == 0 {
+		// ni sporočil
 		noSubscriptionstext := "No new messages."
 		s += getMarginLeftString(m) + verticalLineChar + getContnetPaddingSidesString(m) + noSubscriptionstext
 		s += getFillWithString(m, contentWidth-(runewidth.StringWidth(noSubscriptionstext)+contnetPadddingSides), " ")
@@ -995,6 +996,7 @@ func getLiveChatView(m model) string {
 		s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
 		s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
 	} else {
+		// so sporočila
 		s += getSubscribeItemsString(m)
 		renderedLines := m.contentEndIndexes[1] - m.contentStartIndexes[1] + 1
 

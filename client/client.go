@@ -411,7 +411,16 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 
 	fmt.Printf("Messages in topic %d:\n", topicId)
 	for _, msg := range response.Messages {
-		fmt.Printf("  [%d] User %d: %s (likes: %d)\n", msg.Id, msg.UserId, msg.Text, msg.Likes)
+		getUserReq := &pb.GetUserRequest{
+			UserId:    msg.UserId,
+			RequestBy: clientState.User.Id,
+		}
+		user, err := clientState.rpcTail.GetUser(clientState.Ctx, getUserReq)
+		if err != nil {
+			fmt.Println("Error getting username:", err)
+			fmt.Printf("  ??? [%d]: %s (likes: %d)\n", msg.UserId, msg.Text, msg.Likes)
+		}
+		fmt.Printf("  %s [%d]: %s (likes: %d)\n", user.Name, msg.UserId, msg.Text, msg.Likes)
 	}
 }
 
@@ -581,9 +590,20 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 					opName = "DELETE"
 				}
 
-				fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
-					opName, event.Message.TopicId, event.Message.Id,
-					event.Message.Text, event.Message.Likes)
+				getUserReq := &pb.GetUserRequest{
+					UserId:    event.ExecutedById,
+					RequestBy: clientState.User.Id,
+				}
+				user, err := clientState.rpcTail.GetUser(clientState.Ctx, getUserReq)
+				if err != nil {
+					fmt.Println("Error getting username:", err)
+					fmt.Printf("\n[%s] ??? [%d]: %s (likes: %d)\n> ", opName, event.ExecutedById, event.Message.Text, event.Message.Likes)
+				}
+				fmt.Printf("\n[%s] %s [%d]: %s (likes: %d)\n> ", opName, user.Name, event.ExecutedById, event.Message.Text, event.Message.Likes)
+
+				/*fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
+				opName, event.Message.TopicId, event.Message.Id,
+				event.Message.Text, event.Message.Likes)*/
 			}
 		}()
 	}
