@@ -418,9 +418,9 @@ func listMessagesHandler(clientState *ClientState, args []string) {
 		user, err := clientState.rpcTail.GetUser(clientState.Ctx, getUserReq)
 		if err != nil {
 			fmt.Println("Error getting username:", err)
-			fmt.Printf("  ??? [%d]: %s (likes: %d)\n", msg.UserId, msg.Text, msg.Likes)
+			fmt.Printf(" [%d] ??? [%d]: %s (likes: %d)\n", msg.UserId, msg.Id, msg.Text, msg.Likes)
 		}
-		fmt.Printf("  %s [%d]: %s (likes: %d)\n", user.Name, msg.UserId, msg.Text, msg.Likes)
+		fmt.Printf(" [%d] %s [%d]: %s (likes: %d)\n", msg.Id, user.Name, msg.Id, msg.Text, msg.Likes)
 	}
 }
 
@@ -597,9 +597,9 @@ func subscribtionHandler(clientState *ClientState, args []string) {
 				user, err := clientState.rpcTail.GetUser(clientState.Ctx, getUserReq)
 				if err != nil {
 					fmt.Println("Error getting username:", err)
-					fmt.Printf("\n[%s] ??? [%d]: %s (likes: %d)\n> ", opName, event.ExecutedById, event.Message.Text, event.Message.Likes)
+					fmt.Printf("\n[%s] [%d] ??? [%d]: %s (likes: %d)\n> ", opName, event.ExecutedById, event.Message.Id, event.Message.Text, event.Message.Likes)
 				}
-				fmt.Printf("\n[%s] %s [%d]: %s (likes: %d)\n> ", opName, user.Name, event.ExecutedById, event.Message.Text, event.Message.Likes)
+				fmt.Printf("\n[%s] [%d] %s [%d]: %s (likes: %d)\n> ", opName, event.ExecutedById, user.Name, event.Message.Id, event.Message.Text, event.Message.Likes)
 
 				/*fmt.Printf("\n[%s] Topic %d, Msg %d: %s (likes: %d)\n> ",
 				opName, event.Message.TopicId, event.Message.Id,
