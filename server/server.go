@@ -38,6 +38,7 @@ type MessageBoardServer struct {
 	nextTopicID   int64
 	messages      map[int64]*pb.Message
 	nextMessageID int64
+	likedBy       map[int64]map[int64]bool // message id -> user id -> bool ali je že lajkal
 	users         map[int64]*pb.User
 	nextUserID    int64
 	// subscribe stvari
@@ -77,6 +78,7 @@ func newMessageBoardServer(url string, id string, isHead bool, isTail bool) *Mes
 		nextMessageID:      1,
 		users:              make(map[int64]*pb.User, 0),
 		nextUserID:         1,
+		likedBy:            make(map[int64]map[int64]bool),
 		subscribers:        make(map[int64][]chan *pb.MessageEvent),
 		nextSeqNum:         1,
 		subscribersPerNode: make(map[string]int64),            // kolk je subscriberjov na posamznem nodeu. sicer ga rabi samo head, ampak zaenkrat tkole
@@ -329,6 +331,16 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
 
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+
+	if msg.UserId != req.UserId {
+		fmt.Printf("UPDATE MESSAGE ATTEMPT ON MESSAGE %d BY USER WITH ID %d, BUT THEY ARE NOT THE AUTHOR\n", req.MessageId, req.UserId)
+		return nil, fmt.Errorf("unathorised update message attempt")
+	}
+
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.UpdateMessage(ctx, req)
 
@@ -340,10 +352,6 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
-	msg := server.messages[req.MessageId]
-	if msg == nil {
-		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
-	}
 	oldText := msg.Text
 	server.messages[req.MessageId].Text = req.Text
 	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
@@ -354,6 +362,17 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 }
 
 func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.DeleteMessageRequest) (*emptypb.Empty, error) {
+
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		fmt.Printf("DELETE MESSAGE ATTEMPT BY USER WITH ID %d, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, req.MessageId)
+		return &emptypb.Empty{}, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+
+	if msg.UserId != req.UserId {
+		fmt.Printf("DELETE MESSAGE ATTEMPT ON MESSAGE %d BY USER WITH ID %d, BUT THEY ARE NOT THE AUTHOR\n", req.MessageId, req.UserId)
+		return nil, fmt.Errorf("unathorised delete message attempt")
+	}
 
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.DeleteMessage(ctx, req)
@@ -366,11 +385,6 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
-	msg := server.messages[req.MessageId]
-	if msg == nil {
-		fmt.Printf("DELETE MESSAGE ATTEMPT BY [%d] %s, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, server.users[req.UserId].Name, req.MessageId)
-		return &emptypb.Empty{}, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
-	}
 	delete(server.messages, req.MessageId)
 	fmt.Printf("MESSAGE WITH ID %d DELETED\n", req.MessageId)
 	// same here
@@ -403,6 +417,17 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 		return nil, fmt.Errorf("message with id %d not found", message_id)
 	}
 
+	// inicializiramo mapo za likes
+	if server.likedBy[req.MessageId] == nil {
+		server.likedBy[req.MessageId] = make(map[int64]bool)
+	}
+
+	// preverimo ali je uporabnik že likeal ta message
+	if server.likedBy[req.MessageId][req.UserId] {
+		return nil, fmt.Errorf("user %d already liked message %d", req.UserId, req.MessageId)
+	}
+
+	server.likedBy[req.MessageId][req.UserId] = true
 	message.Likes += 1
 
 	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d\n", message_id, topic_id)
