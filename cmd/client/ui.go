@@ -563,6 +563,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// subscribe
 					//m.subscribedTopicIds = append(m.subscribedTopicIds, m.openTopicId)
 					return m, subscribeCmd(m, int(m.openTopicId))
+				case "r":
+					// refresh
+					m.messages = make(map[int64]client.UiMessageItem) // reset
+					return m, listMessagesCmd(m)
 				}
 			} else {
 				switch msg.String() {
@@ -658,6 +662,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						//m.subscribedTopicIds = append(m.subscribedTopicIds, ids[index])
 						return m, subscribeCmd(m, int(topicId))
+					}
+				case "r":
+					if m.tabs[m.openTabIndex] == "Topics" {
+						return m, listTopicsCmd(m)
 					}
 				}
 			}
@@ -1268,7 +1276,7 @@ func getTopicsString(m model) string {
 		line := aquaColorStyle.Render(prefix) + m.createTopicInput.View()
 		s += line + getFillWithString(m, contentWidth-(runewidth.StringWidth(line)+tabsPadding-runewidth.StringWidth(prefix)-7), " ") + verticalLineChar + "\n"
 	} else {
-		legendString := "c - create new topic " + verticalLineChar + " q - quit"
+		legendString := "c - create new topic " + verticalLineChar + " r - refresh " + verticalLineChar + " q - quit"
 		s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString)+tabsPadding), " ") + verticalLineChar + "\n"
 	}
 	s += getMarginLeftString(m) + bottomLeftChar + getFillWithString(m, contentWidth, horizontalLineChar) + bottomRightChar + "\n"
@@ -1331,7 +1339,7 @@ func getOpenTopicString(m model) string {
 
 	} else {
 		s += getMarginLeftString(m) + verticalLineChar + getTabsPadding(m)
-		legendString := "p - post new message " + verticalLineChar + " b - back " + verticalLineChar + " q - quit"
+		legendString := "p - post new message " + verticalLineChar + " r - refresh " + verticalLineChar + " b - back " + verticalLineChar + " q - quit"
 		//s += legendString + getFillWithString(m, contentWidth-(len(legendString)+tabsPadding-4), " ") + verticalLineChar + "\n"
 		s += aquaColorStyle.Render(legendString) + getFillWithString(m, contentWidth-(runewidth.StringWidth(legendString))-2, " ") + getFillWithString(m, tabsPadding, " ") + verticalLineChar + "\n"
 	}
