@@ -1853,14 +1853,15 @@ const file_razpravljalnica_proto_rawDesc = "" +
 	"\x12ExpireSubscription\x12*.razpravljalnica.ExpireSubscriptionRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
 	"\aGetUser\x12\x1f.razpravljalnica.GetUserRequest\x1a\x15.razpravljalnica.User2c\n" +
 	"\fControlPlane\x12S\n" +
-	"\x0fGetClusterState\x12\x16.google.protobuf.Empty\x1a(.razpravljalnica.GetClusterStateResponse2\xb4\x04\n" +
+	"\x0fGetClusterState\x12\x16.google.protobuf.Empty\x1a(.razpravljalnica.GetClusterStateResponse2\x8e\x05\n" +
 	"\fOrchestrator\x12[\n" +
 	"\fRegisterNode\x12$.razpravljalnica.RegisterNodeRequest\x1a%.razpravljalnica.RegisterNodeResponse\x12R\n" +
 	"\tHeartbeat\x12!.razpravljalnica.HeartbeatRequest\x1a\".razpravljalnica.HeartbeatResponse\x12S\n" +
 	"\x0fGetClusterState\x12\x16.google.protobuf.Empty\x1a(.razpravljalnica.GetClusterStateResponse\x12j\n" +
 	"\x13GetSubscriptionNode\x12(.razpravljalnica.SubscriptionNodeRequest\x1a).razpravljalnica.SubscriptionNodeResponse\x12X\n" +
 	"\vVerifyToken\x12#.razpravljalnica.VerifyTokenRequest\x1a$.razpravljalnica.VerifyTokenResponse\x12X\n" +
-	"\vJoinCluster\x12#.razpravljalnica.JoinClusterRequest\x1a$.razpravljalnica.JoinClusterResponseB\x12Z\x10/razpravljalnicab\x06proto3"
+	"\vJoinCluster\x12#.razpravljalnica.JoinClusterRequest\x1a$.razpravljalnica.JoinClusterResponse\x12X\n" +
+	"\x12ExpireSubscription\x12*.razpravljalnica.ExpireSubscriptionRequest\x1a\x16.google.protobuf.EmptyB\x12Z\x10/razpravljalnicab\x06proto3"
 
 var (
 	file_razpravljalnica_proto_rawDescOnce sync.Once
@@ -1941,29 +1942,31 @@ var file_razpravljalnica_proto_depIdxs = []int32{
 	16, // 27: razpravljalnica.Orchestrator.GetSubscriptionNode:input_type -> razpravljalnica.SubscriptionNodeRequest
 	19, // 28: razpravljalnica.Orchestrator.VerifyToken:input_type -> razpravljalnica.VerifyTokenRequest
 	28, // 29: razpravljalnica.Orchestrator.JoinCluster:input_type -> razpravljalnica.JoinClusterRequest
-	1,  // 30: razpravljalnica.MessageBoard.CreateUser:output_type -> razpravljalnica.User
-	2,  // 31: razpravljalnica.MessageBoard.CreateTopic:output_type -> razpravljalnica.Topic
-	3,  // 32: razpravljalnica.MessageBoard.PostMessage:output_type -> razpravljalnica.Message
-	3,  // 33: razpravljalnica.MessageBoard.UpdateMessage:output_type -> razpravljalnica.Message
-	31, // 34: razpravljalnica.MessageBoard.DeleteMessage:output_type -> google.protobuf.Empty
-	3,  // 35: razpravljalnica.MessageBoard.LikeMessage:output_type -> razpravljalnica.Message
-	17, // 36: razpravljalnica.MessageBoard.GetSubscriptionNode:output_type -> razpravljalnica.SubscriptionNodeResponse
-	12, // 37: razpravljalnica.MessageBoard.ListTopics:output_type -> razpravljalnica.ListTopicsResponse
-	14, // 38: razpravljalnica.MessageBoard.GetMessages:output_type -> razpravljalnica.GetMessagesResponse
-	18, // 39: razpravljalnica.MessageBoard.SubscribeTopic:output_type -> razpravljalnica.MessageEvent
-	31, // 40: razpravljalnica.MessageBoard.TestConnection:output_type -> google.protobuf.Empty
-	20, // 41: razpravljalnica.MessageBoard.VerifyToken:output_type -> razpravljalnica.VerifyTokenResponse
-	31, // 42: razpravljalnica.MessageBoard.ExpireSubscription:output_type -> google.protobuf.Empty
-	1,  // 43: razpravljalnica.MessageBoard.GetUser:output_type -> razpravljalnica.User
-	23, // 44: razpravljalnica.ControlPlane.GetClusterState:output_type -> razpravljalnica.GetClusterStateResponse
-	25, // 45: razpravljalnica.Orchestrator.RegisterNode:output_type -> razpravljalnica.RegisterNodeResponse
-	27, // 46: razpravljalnica.Orchestrator.Heartbeat:output_type -> razpravljalnica.HeartbeatResponse
-	23, // 47: razpravljalnica.Orchestrator.GetClusterState:output_type -> razpravljalnica.GetClusterStateResponse
-	17, // 48: razpravljalnica.Orchestrator.GetSubscriptionNode:output_type -> razpravljalnica.SubscriptionNodeResponse
-	20, // 49: razpravljalnica.Orchestrator.VerifyToken:output_type -> razpravljalnica.VerifyTokenResponse
-	29, // 50: razpravljalnica.Orchestrator.JoinCluster:output_type -> razpravljalnica.JoinClusterResponse
-	30, // [30:51] is the sub-list for method output_type
-	9,  // [9:30] is the sub-list for method input_type
+	21, // 30: razpravljalnica.Orchestrator.ExpireSubscription:input_type -> razpravljalnica.ExpireSubscriptionRequest
+	1,  // 31: razpravljalnica.MessageBoard.CreateUser:output_type -> razpravljalnica.User
+	2,  // 32: razpravljalnica.MessageBoard.CreateTopic:output_type -> razpravljalnica.Topic
+	3,  // 33: razpravljalnica.MessageBoard.PostMessage:output_type -> razpravljalnica.Message
+	3,  // 34: razpravljalnica.MessageBoard.UpdateMessage:output_type -> razpravljalnica.Message
+	31, // 35: razpravljalnica.MessageBoard.DeleteMessage:output_type -> google.protobuf.Empty
+	3,  // 36: razpravljalnica.MessageBoard.LikeMessage:output_type -> razpravljalnica.Message
+	17, // 37: razpravljalnica.MessageBoard.GetSubscriptionNode:output_type -> razpravljalnica.SubscriptionNodeResponse
+	12, // 38: razpravljalnica.MessageBoard.ListTopics:output_type -> razpravljalnica.ListTopicsResponse
+	14, // 39: razpravljalnica.MessageBoard.GetMessages:output_type -> razpravljalnica.GetMessagesResponse
+	18, // 40: razpravljalnica.MessageBoard.SubscribeTopic:output_type -> razpravljalnica.MessageEvent
+	31, // 41: razpravljalnica.MessageBoard.TestConnection:output_type -> google.protobuf.Empty
+	20, // 42: razpravljalnica.MessageBoard.VerifyToken:output_type -> razpravljalnica.VerifyTokenResponse
+	31, // 43: razpravljalnica.MessageBoard.ExpireSubscription:output_type -> google.protobuf.Empty
+	1,  // 44: razpravljalnica.MessageBoard.GetUser:output_type -> razpravljalnica.User
+	23, // 45: razpravljalnica.ControlPlane.GetClusterState:output_type -> razpravljalnica.GetClusterStateResponse
+	25, // 46: razpravljalnica.Orchestrator.RegisterNode:output_type -> razpravljalnica.RegisterNodeResponse
+	27, // 47: razpravljalnica.Orchestrator.Heartbeat:output_type -> razpravljalnica.HeartbeatResponse
+	23, // 48: razpravljalnica.Orchestrator.GetClusterState:output_type -> razpravljalnica.GetClusterStateResponse
+	17, // 49: razpravljalnica.Orchestrator.GetSubscriptionNode:output_type -> razpravljalnica.SubscriptionNodeResponse
+	20, // 50: razpravljalnica.Orchestrator.VerifyToken:output_type -> razpravljalnica.VerifyTokenResponse
+	29, // 51: razpravljalnica.Orchestrator.JoinCluster:output_type -> razpravljalnica.JoinClusterResponse
+	31, // 52: razpravljalnica.Orchestrator.ExpireSubscription:output_type -> google.protobuf.Empty
+	31, // [31:53] is the sub-list for method output_type
+	9,  // [9:31] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name

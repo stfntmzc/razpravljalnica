@@ -224,6 +224,8 @@ service Orchestrator {
     rpc GetSubscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
     rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
     rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse);
+    // dodano
+    rpc ExpireSubscription(ExpireSubscriptionRequest) returns (google.protobuf.Empty);
 }
 
 message RegisterNodeRequest {

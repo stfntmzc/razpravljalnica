@@ -611,6 +611,18 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 			fmt.Printf("USER [%d] UNSUBSCRIBED FROM TOPIC [%d]\n", req.UserId, req.TopicId[0])
 		}
 		server.subscribersMu.Unlock()
+
+		// nov ctx ker stream.Context() je bil prekinjen z .Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, err := server.orchClient.ExpireSubscription(ctx, &pb.ExpireSubscriptionRequest{
+			Token:  req.SubscribeToken,
+			UserId: req.UserId,
+			NodeId: server.id,
+		})
+		if err != nil {
+			fmt.Printf("ERROR EXPIERING USER [%d]'S SUBSCRIPTION TO TOPIC [%d]: %s\n", req.UserId, req.TopicId[0], err)
+		}
 		close(ch)
 	}()
 

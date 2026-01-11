@@ -10,9 +10,10 @@ import (
 	"sync"
 	"time"
 
+	pb "razpravljalnica/proto"
+
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
-	pb "razpravljalnica/proto"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -285,6 +286,25 @@ func (o *Orchestrator) VerifyToken(ctx context.Context, req *pb.VerifyTokenReque
 	}
 
 	return &pb.VerifyTokenResponse{Valid: true}, nil
+}
+
+func (o *Orchestrator) ExpireSubscription(ctx context.Context, req *pb.ExpireSubscriptionRequest) (*emptypb.Empty, error) {
+	o.fsm.mu.RLock()
+	tokenInfo, ok := o.fsm.validTokens[req.Token]
+	o.fsm.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("Invalid token")
+	}
+	if tokenInfo.UserId != req.UserId {
+		return nil, fmt.Errorf("Wrong user")
+	}
+	o.fsm.mu.Lock()
+	defer o.fsm.mu.Unlock()
+	//o.fsm.nodeSubs[tokenInfo.NodeId]--
+	fmt.Printf("User %d unsubscribed from topic %d on node %s\n", req.UserId, tokenInfo.TopicIds[0], tokenInfo.NodeId)
+	delete(o.fsm.validTokens, req.Token)
+	fmt.Printf("Subscription with token %s successfuly expired\n", req.Token)
+	return nil, nil
 }
 
 func (o *Orchestrator) monitorHealth() {

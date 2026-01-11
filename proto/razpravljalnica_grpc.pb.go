@@ -764,6 +764,7 @@ const (
 	Orchestrator_GetSubscriptionNode_FullMethodName = "/razpravljalnica.Orchestrator/GetSubscriptionNode"
 	Orchestrator_VerifyToken_FullMethodName         = "/razpravljalnica.Orchestrator/VerifyToken"
 	Orchestrator_JoinCluster_FullMethodName         = "/razpravljalnica.Orchestrator/JoinCluster"
+	Orchestrator_ExpireSubscription_FullMethodName  = "/razpravljalnica.Orchestrator/ExpireSubscription"
 )
 
 // OrchestratorClient is the client API for Orchestrator service.
@@ -776,6 +777,8 @@ type OrchestratorClient interface {
 	GetSubscriptionNode(ctx context.Context, in *SubscriptionNodeRequest, opts ...grpc.CallOption) (*SubscriptionNodeResponse, error)
 	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
 	JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error)
+	// dodano
+	ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type orchestratorClient struct {
@@ -846,6 +849,16 @@ func (c *orchestratorClient) JoinCluster(ctx context.Context, in *JoinClusterReq
 	return out, nil
 }
 
+func (c *orchestratorClient) ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Orchestrator_ExpireSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrchestratorServer is the server API for Orchestrator service.
 // All implementations must embed UnimplementedOrchestratorServer
 // for forward compatibility.
@@ -856,6 +869,8 @@ type OrchestratorServer interface {
 	GetSubscriptionNode(context.Context, *SubscriptionNodeRequest) (*SubscriptionNodeResponse, error)
 	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
 	JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error)
+	// dodano
+	ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedOrchestratorServer()
 }
 
@@ -883,6 +898,9 @@ func (UnimplementedOrchestratorServer) VerifyToken(context.Context, *VerifyToken
 }
 func (UnimplementedOrchestratorServer) JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinCluster not implemented")
+}
+func (UnimplementedOrchestratorServer) ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExpireSubscription not implemented")
 }
 func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
 func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
@@ -1013,6 +1031,24 @@ func _Orchestrator_JoinCluster_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Orchestrator_ExpireSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExpireSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).ExpireSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_ExpireSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).ExpireSubscription(ctx, req.(*ExpireSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Orchestrator_ServiceDesc is the grpc.ServiceDesc for Orchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1043,6 +1079,10 @@ var Orchestrator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinCluster",
 			Handler:    _Orchestrator_JoinCluster_Handler,
+		},
+		{
+			MethodName: "ExpireSubscription",
+			Handler:    _Orchestrator_ExpireSubscription_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
