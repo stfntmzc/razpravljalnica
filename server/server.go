@@ -711,11 +711,28 @@ func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
 	server.isHead = resp.NewRole == "head"
 	server.isTail = resp.NewRole == "tail"
 
+	// Handle new next neighbor
 	if resp.NewNext != "" {
 		go server.connectToNode(resp.NewNext, true)
+	} else if server.isTail {
+		// We became TAIL, no next node
+		if server.nodeNext != nil {
+			server.nodeNext.cancel()
+			server.nodeNext.conn.Close()
+			server.nodeNext = nil
+		}
 	}
+
+	// Handle new prev neighbor
 	if resp.NewPrev != "" {
 		go server.connectToNode(resp.NewPrev, false)
+	} else if server.isHead {
+		// We became HEAD, no prev node
+		if server.nodePrev != nil {
+			server.nodePrev.cancel()
+			server.nodePrev.conn.Close()
+			server.nodePrev = nil
+		}
 	}
 }
 
