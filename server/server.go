@@ -323,7 +323,7 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 	fmt.Printf("NEW MESSAGE BY [%d] %s ON TOPIC [%d] %s: [%d] %s\n", user.Id, user.Name, topic.Id, topic.Name, msg.Id, msg.Text)
 
 	// modified da se lahko broadcasta
-	server.broadcast(msg.TopicId, pb.OpType_OP_POST, msg)
+	server.broadcast(msg.TopicId, pb.OpType_OP_POST, msg, req.UserId)
 	return msg, nil
 }
 
@@ -349,7 +349,7 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
 
 	// same here
-	server.broadcast(msg.TopicId, pb.OpType_OP_UPDATE, msg)
+	server.broadcast(msg.TopicId, pb.OpType_OP_UPDATE, msg, req.UserId)
 	return server.messages[req.MessageId], nil
 }
 
@@ -374,7 +374,7 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 	delete(server.messages, req.MessageId)
 	fmt.Printf("MESSAGE WITH ID %d DELETED\n", req.MessageId)
 	// same here
-	server.broadcast(msg.TopicId, pb.OpType_OP_DELETE, msg)
+	server.broadcast(msg.TopicId, pb.OpType_OP_DELETE, msg, req.UserId)
 	return &emptypb.Empty{}, nil
 }
 
@@ -406,7 +406,7 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 	message.Likes += 1
 
 	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d\n", message_id, topic_id)
-	server.broadcast(message.TopicId, pb.OpType_OP_LIKE, message)
+	server.broadcast(message.TopicId, pb.OpType_OP_LIKE, message, req.UserId)
 	return message, nil
 }
 
@@ -437,15 +437,24 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 	from_id := req.FromMessageId
 	limit := req.Limit
 
-	messages_slice := make([]*pb.Message, 0, limit)
+	var messages_slice []*pb.Message
+	if req.Limit > 0 {
+		messages_slice = make([]*pb.Message, 0, req.Limit)
+	} else {
+		messages_slice = make([]*pb.Message, 0)
+	}
 
 	i := int32(0)
 
 	for _, message := range server.messages {
-		if from_id <= message.Id && topic_id == message.TopicId && i < limit {
-			i += 1
-			messages_slice = append(messages_slice, message)
+		if message.TopicId != topic_id || message.Id < from_id {
+			continue
 		}
+		if limit != -1 && i >= limit {
+			break
+		}
+		messages_slice = append(messages_slice, message)
+		i++
 	}
 
 	response := &pb.GetMessagesResponse{
@@ -543,8 +552,15 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 		Token:  req.SubscribeToken,
 		UserId: req.UserId,
 	})
-	if err != nil || !tokenResp.Valid {
-		return fmt.Errorf("invalid token")
+
+	//tokenVerification, err := server.nodePrev.rpc.VerifyToken(context.Background(), tokenVerificationReq)
+	if err != nil {
+		fmt.Printf("SUBSCRIBE UNSUCCSESSFUL (ERROR): userId=%d\n", req.UserId)
+		return err
+	}
+	if !tokenResp.Valid {
+		fmt.Printf("SUBSCRIBE UNSUCCSESSFUL: userId=%d\n", req.UserId)
+		return fmt.Errorf("Invalid token")
 	}
 
 	// token je ok, nadaljujemo
@@ -619,18 +635,19 @@ func (server *MessageBoardServer) ExpireSubscription(ctx context.Context, req *p
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	server.subscribersPerNode[subInfo.nodeId]--
-	delete(server.subscriptions, req.Token)
 	fmt.Printf("USER [%d] %s UNSUBSCRIBED FROM TOPIC [%d] ON NODE %s\n", req.UserId, server.users[req.UserId].Name, server.subscriptions[req.Token].topicId, subInfo.nodeId)
+	delete(server.subscriptions, req.Token)
 	return nil, nil
 }
 
 // helper funkcija
-func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb.Message) {
+func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb.Message, executedById int64) {
 	event := &pb.MessageEvent{
 		SequenceNumber: server.nextSeqNum,
 		Op:             op,
 		Message:        msg,
 		EventAt:        timestamppb.Now(),
+		ExecutedById:   executedById,
 	}
 	server.nextSeqNum++
 
@@ -645,11 +662,23 @@ func (server *MessageBoardServer) broadcast(topicId int64, op pb.OpType, msg *pb
 	server.subscribersMu.RUnlock()
 }
 
+func (server *MessageBoardServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
+	user, ok := server.users[req.UserId]
+	if !ok {
+		fmt.Printf("user [%d] not found\n", req.UserId)
+		return nil, fmt.Errorf("user [%d] not found", req.UserId)
+	}
+	fmt.Printf("user [%d] requested user info [%d]\n", req.RequestBy, req.UserId)
+	return &pb.User{
+		Name: user.Name,
+		Id:   user.Id,
+	}, nil
+}
+
 func (server *MessageBoardServer) heartbeatLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 
 	for range ticker.C {
-		// DEBUG: fmt.Println("Sending heartbeat...")
 
 		server.subscribersMu.RLock()
 		subCount := int32(0)
@@ -683,9 +712,22 @@ func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
 
 	if resp.NewNext != "" {
 		go server.connectToNode(resp.NewNext, true)
+	} else if server.isTail {
+		if server.nodeNext != nil {
+			server.nodeNext.cancel()
+			server.nodeNext.conn.Close()
+			server.nodeNext = nil
+		}
 	}
+
 	if resp.NewPrev != "" {
 		go server.connectToNode(resp.NewPrev, false)
+	} else if server.isHead {
+		if server.nodePrev != nil {
+			server.nodePrev.cancel()
+			server.nodePrev.conn.Close()
+			server.nodePrev = nil
+		}
 	}
 }
 

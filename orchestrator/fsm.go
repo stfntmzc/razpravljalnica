@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-// Tipi komand
 const (
 	CmdRegisterNode = "register_node"
 	CmdHeartbeat    = "heartbeat"
@@ -18,7 +17,6 @@ const (
 	CmdStoreToken   = "store_token"
 )
 
-// Te komande se replicirajo v druge node
 type Command struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
@@ -80,11 +78,12 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 }
 
 type RegisterNodePayload struct {
-	NodeId  string `json:"node_id"`
-	Address string `json:"address"`
-	Role    string `json:"role"`
-	Next    string `json:"next"`
-	Prev    string `json:"prev"`
+	NodeId    string `json:"node_id"`
+	Address   string `json:"address"`
+	Role      string `json:"role"`
+	Next      string `json:"next"`
+	Prev      string `json:"prev"`
+	OldTailId string `json:"old_tail_id,omitempty"`
 }
 
 func (f *FSM) applyRegisterNode(payload json.RawMessage) interface{} {
@@ -93,6 +92,15 @@ func (f *FSM) applyRegisterNode(payload json.RawMessage) interface{} {
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if p.OldTailId != "" {
+		if oldTail, ok := f.nodes[p.OldTailId]; ok {
+			oldTail.Role = "middle"
+			oldTail.NextAddress = p.Address
+			oldTail.Reconfigure = true
+			fmt.Printf("[FSM] Old tail %s reconfigured to middle, next=%s\n", p.OldTailId, p.Address)
+		}
+	}
 
 	node := &NodeInfo{
 		Id:          p.NodeId,

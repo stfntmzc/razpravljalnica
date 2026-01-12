@@ -10,9 +10,10 @@ import (
 	"sync"
 	"time"
 
+	pb "razpravljalnica/proto"
+
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
-	pb "razpravljalnica/proto"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -147,17 +148,13 @@ func (o *Orchestrator) RegisterNode(ctx context.Context, req *pb.RegisterNodeReq
 	o.fsm.mu.Lock()
 
 	nodeId := fmt.Sprintf("node-%d", len(o.fsm.nodes)+1)
-	var role, nextAddr, prevAddr string
+	var role, nextAddr, prevAddr, oldTailId string
 
 	if len(o.fsm.chainOrder) == 0 {
 		role = "head"
 	} else {
-		oldTailId := o.fsm.chainOrder[len(o.fsm.chainOrder)-1]
+		oldTailId = o.fsm.chainOrder[len(o.fsm.chainOrder)-1]
 		oldTail := o.fsm.nodes[oldTailId]
-
-		oldTail.Role = "middle"
-		oldTail.NextAddress = req.Address
-		oldTail.Reconfigure = true
 
 		role = "tail"
 		prevAddr = oldTail.Address
@@ -165,13 +162,13 @@ func (o *Orchestrator) RegisterNode(ctx context.Context, req *pb.RegisterNodeReq
 
 	o.fsm.mu.Unlock()
 
-	// apliciramo komande
 	err := o.applyCommand(CmdRegisterNode, RegisterNodePayload{
-		NodeId:  nodeId,
-		Address: req.Address,
-		Role:    role,
-		Next:    nextAddr,
-		Prev:    prevAddr,
+		NodeId:    nodeId,
+		Address:   req.Address,
+		Role:      role,
+		Next:      nextAddr,
+		Prev:      prevAddr,
+		OldTailId: oldTailId,
 	})
 	if err != nil {
 		return nil, err
@@ -294,22 +291,26 @@ func (o *Orchestrator) monitorHealth() {
 			continue
 		}
 
-		o.fsm.mu.Lock()
+		o.fsm.mu.RLock()
+		var deadNodes []string
 		now := time.Now()
 		for nodeId, lastBeat := range o.fsm.nodeHealth {
 			if now.Sub(lastBeat) > 5*time.Second {
-				fmt.Printf("Node %s is DEAD!\n", nodeId)
-				o.handleNodeFailure(nodeId)
+				deadNodes = append(deadNodes, nodeId)
 			}
 		}
-		o.fsm.mu.Unlock()
+		o.fsm.mu.RUnlock()
+
+		for _, nodeId := range deadNodes {
+			fmt.Printf("Node %s is DEAD!\n", nodeId)
+			o.handleNodeFailure(nodeId)
+		}
 	}
 }
 
 func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
-	o.applyCommand(CmdRemoveNode, RemoveNodePayload{NodeId: deadNodeId})
+	o.fsm.mu.Lock()
 
-	// Treba izboljsat
 	idx := -1
 	for i, id := range o.fsm.chainOrder {
 		if id == deadNodeId {
@@ -318,29 +319,58 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 		}
 	}
 
-	if idx >= 0 {
-		var prevId, nextId string
-		if idx > 0 {
-			prevId = o.fsm.chainOrder[idx-1]
-		}
-		if idx < len(o.fsm.chainOrder)-1 {
-			nextId = o.fsm.chainOrder[idx+1]
-		}
-
-		if prevId != "" && nextId != "" {
-			o.fsm.nodes[prevId].NextAddress = o.fsm.nodes[nextId].Address
-			o.fsm.nodes[prevId].Reconfigure = true
-			o.fsm.nodes[nextId].PrevAddress = o.fsm.nodes[prevId].Address
-			o.fsm.nodes[nextId].Reconfigure = true
-		}
-
-		if len(o.fsm.chainOrder) > 0 {
-			o.fsm.nodes[o.fsm.chainOrder[0]].Role = "head"
-			o.fsm.nodes[o.fsm.chainOrder[len(o.fsm.chainOrder)-1]].Role = "tail"
-		}
+	if idx < 0 {
+		o.fsm.mu.Unlock()
+		return
 	}
 
-	fmt.Printf("Chain reconfigured after %s failure\n", deadNodeId)
+	var prevId, nextId string
+	var prevNode, nextNode *NodeInfo
+
+	if idx > 0 {
+		prevId = o.fsm.chainOrder[idx-1]
+		prevNode = o.fsm.nodes[prevId]
+	}
+	if idx < len(o.fsm.chainOrder)-1 {
+		nextId = o.fsm.chainOrder[idx+1]
+		nextNode = o.fsm.nodes[nextId]
+	}
+
+	o.fsm.chainOrder = append(o.fsm.chainOrder[:idx], o.fsm.chainOrder[idx+1:]...)
+	delete(o.fsm.nodes, deadNodeId)
+	delete(o.fsm.nodeHealth, deadNodeId)
+	delete(o.fsm.nodeSubs, deadNodeId)
+
+	if prevNode != nil && nextNode != nil {
+		prevNode.NextAddress = nextNode.Address
+		prevNode.Reconfigure = true
+		nextNode.PrevAddress = prevNode.Address
+		nextNode.Reconfigure = true
+	} else if prevNode != nil && nextNode == nil {
+		prevNode.NextAddress = ""
+		prevNode.Role = "tail"
+		prevNode.Reconfigure = true
+	} else if prevNode == nil && nextNode != nil {
+		nextNode.PrevAddress = ""
+		nextNode.Role = "head"
+		nextNode.Reconfigure = true
+	}
+
+	if len(o.fsm.chainOrder) == 1 {
+		o.fsm.nodes[o.fsm.chainOrder[0]].Role = "head"
+	} else if len(o.fsm.chainOrder) > 1 {
+		o.fsm.nodes[o.fsm.chainOrder[0]].Role = "head"
+		o.fsm.nodes[o.fsm.chainOrder[len(o.fsm.chainOrder)-1]].Role = "tail"
+	}
+
+	o.fsm.mu.Unlock()
+
+	err := o.applyCommand(CmdRemoveNode, RemoveNodePayload{NodeId: deadNodeId})
+	if err != nil {
+		fmt.Printf("Failed to apply remove command: %v\n", err)
+	}
+
+	fmt.Printf("Chain reconfigured after %s failure. Chain: %v\n", deadNodeId, o.fsm.chainOrder)
 }
 
 func generateToken() string {
