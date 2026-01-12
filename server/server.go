@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	pb "razpravljalnica/proto"
+	"sort"
 	"time"
 
 	"slices"
@@ -469,17 +470,27 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 		messages_slice = make([]*pb.Message, 0)
 	}
 
-	i := int32(0)
+	//i := int32(0)
 
 	for _, message := range server.messages {
 		if message.TopicId != topic_id || message.Id < from_id {
 			continue
 		}
-		if limit != -1 && i >= limit {
+		/*if limit != -1 && i >= limit {
 			break
-		}
+		}*/
 		messages_slice = append(messages_slice, message)
-		i++
+		//i++
+	}
+
+	// sortiramo po času
+	sort.Slice(messages_slice, func(i, j int) bool {
+		return messages_slice[i].CreatedAt.AsTime().Before(messages_slice[j].CreatedAt.AsTime())
+	})
+
+	// uporabimo limit po sortiranju
+	if limit > 0 && int32(len(messages_slice)) > limit {
+		messages_slice = messages_slice[:limit]
 	}
 
 	response := &pb.GetMessagesResponse{
