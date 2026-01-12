@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	pb "razpravljalnica/proto"
@@ -59,6 +60,7 @@ func TestCreateTopic(t *testing.T) {
 		UserId: user.Id,
 	}
 
+	// naredimo topic
 	topic, err := server.CreateTopic(context.Background(), req)
 	if err != nil {
 		t.Fatalf("CreateTopic returned error: %v", err)
@@ -68,6 +70,7 @@ func TestCreateTopic(t *testing.T) {
 		t.Fatalf("expected topic, got nil")
 	}
 
+	// ujemanje imena
 	if topic.Name != req.Name {
 		t.Errorf("topic name mismatch: got %q want %q", topic.Name, req.Name)
 	}
@@ -108,7 +111,7 @@ func TestLikeMessage(t *testing.T) {
 		UserId:    1,
 	})
 	if err == nil {
-		t.Fatalf("message was liked twice by the same user")
+		t.Errorf("message was liked twice by the same user")
 	}
 
 	storedMsg = server.messages[msg.Id]
@@ -239,10 +242,10 @@ func TestCreateUser(t *testing.T) {
 		t.Errorf("expected 1 user stored, got %d", len(server.users))
 	}
 
-	// drugi create z istim imenom
+	// drugi create z istim imenom ("login")
 	user2, err := server.CreateUser(context.Background(), req)
 	if err != nil {
-		t.Fatalf("CreateUser (duplicate) returned error: %v", err)
+		t.Fatalf("CreateUser returned error: %v", err)
 	}
 
 	if user2.Id != user1.Id {
@@ -281,12 +284,26 @@ func TestListTopics(t *testing.T) {
 		t.Fatalf("expected 2 topics, got %d", len(res.Topics))
 	}
 
+	// sortiramo
+	sort.Slice(res.Topics, func(i, j int) bool {
+		return res.Topics[i].Id < res.Topics[j].Id
+	})
+
+	// preverimo id
+	if res.Topics[0].Id != 1 {
+		t.Errorf("expected topid id 1, got %d", res.Topics[0].Id)
+	}
+	if res.Topics[1].Id != 2 {
+		t.Errorf("expected topid id 2, got %d", res.Topics[1].Id)
+	}
+
 	// preverimo vsebino
 	storedTopics := make(map[int64]string)
 	for _, topic := range res.Topics {
 		storedTopics[topic.Id] = topic.Name
 	}
 
+	// imena
 	expected := make(map[int64]string)
 	expected[topic1.Id] = topic1.Name
 	expected[topic2.Id] = topic2.Name
@@ -315,7 +332,7 @@ func TestGetMessages(t *testing.T) {
 		t.Fatalf("expected 0 messages, got %d", len(res.Messages))
 	}
 
-	// dodamo sporočila
+	// dodamo 2 sporočila
 	text1 := "message 1"
 	text2 := "message 2"
 
@@ -336,6 +353,12 @@ func TestGetMessages(t *testing.T) {
 		t.Fatalf("expected 2 messages, got %d", len(storedMessages.Messages))
 	}
 
+	// sprtiramo
+	sort.Slice(storedMessages.Messages, func(i, j int) bool {
+		return storedMessages.Messages[i].Id < storedMessages.Messages[j].Id
+	})
+
+	// preverjamo id
 	if storedMessages.Messages[0].Id != 1 {
 		t.Errorf("expected MessageId 1, got %d", storedMessages.Messages[0].Id)
 	}
@@ -343,6 +366,7 @@ func TestGetMessages(t *testing.T) {
 		t.Errorf("expected MessageId 2, got %d", storedMessages.Messages[1].Id)
 	}
 
+	// preverjamo topic
 	if storedMessages.Messages[0].TopicId != 1 {
 		t.Errorf("expected TopicId 1, got %d", storedMessages.Messages[0].TopicId)
 	}
@@ -350,6 +374,7 @@ func TestGetMessages(t *testing.T) {
 		t.Errorf("expected TopicId 1, got %d", storedMessages.Messages[1].TopicId)
 	}
 
+	// preverjamo vsebino
 	if storedMessages.Messages[0].Text != text1 {
 		t.Errorf("expected Text %s, got %s", text1, storedMessages.Messages[0].Text)
 	}
@@ -357,6 +382,7 @@ func TestGetMessages(t *testing.T) {
 		t.Errorf("expected Text %s, got %s", text2, storedMessages.Messages[1].Text)
 	}
 
+	// preverjamo uporabnika
 	if storedMessages.Messages[0].UserId != 1 {
 		t.Errorf("expected UserId 1, got %d", storedMessages.Messages[0].UserId)
 	}

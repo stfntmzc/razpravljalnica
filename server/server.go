@@ -501,6 +501,7 @@ var nodeAdresses = map[string]string{
 	"4": "localhost:9879",
 }
 
+// dela orchestrator
 func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *pb.SubscriptionNodeRequest) (*pb.SubscriptionNodeResponse, error) {
 	if !server.isHead {
 		return nil, fmt.Errorf("can't request subscription node from non-head node")
@@ -639,6 +640,7 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 	}
 }
 
+// dela orchestrator
 func (server *MessageBoardServer) VerifyToken(ctx context.Context, req *pb.VerifyTokenRequest) (*pb.VerifyTokenResponse, error) {
 	server.mu.RLock()
 	defer server.mu.RUnlock()
@@ -656,6 +658,7 @@ func (server *MessageBoardServer) VerifyToken(ctx context.Context, req *pb.Verif
 	return server.nodePrev.rpc.VerifyToken(ctx, req)
 }
 
+// dela orchestrator
 func (server *MessageBoardServer) ExpireSubscription(ctx context.Context, req *pb.ExpireSubscriptionRequest) (*emptypb.Empty, error) {
 	if !server.isHead {
 		return nil, fmt.Errorf("Non head node")
