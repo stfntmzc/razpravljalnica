@@ -162,7 +162,7 @@ func TestLikeMessage(t *testing.T) {
 		t.Fatalf("Message liked by author")
 	}
 
-	// preverjanje id, št likeov
+	// preverjanje št likeov
 	messages := getMessages(t, clientState1, topic.Id)
 	index := -1
 	found := false
@@ -176,12 +176,74 @@ func TestLikeMessage(t *testing.T) {
 	if !found {
 		t.Errorf("posted message with ID %d not found in GetMessages response", msgPosted.Id)
 	}
-
-	if messages[index].Id != msgPosted.Id {
-		t.Errorf("expected message id %d, got %d", msgPosted.Id, messages[index].Id)
-	}
 	if messages[index].Likes != 1 {
 		t.Errorf("expected 1 like, got %d", messages[index].Likes)
+	}
+}
+
+func TestUpdateMessage(t *testing.T) {
+
+	// naredimo 2 uporabnika
+	clientState1, err := ConnectToServer("localhost:8000", "test update message user 1")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState1.ConnHead.Close()
+	defer clientState1.ConnTail.Close()
+
+	clientState2, err := ConnectToServer("localhost:8000", "test update message user 2")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState2.ConnHead.Close()
+	defer clientState2.ConnTail.Close()
+
+	// naredimo topic in sporočilo
+	topic := createTopic(t, clientState1, "test update message topic")
+	text1 := "test text 1"
+	msgPosted := postMessage(t, clientState1, topic.Id, text1)
+
+	newText1 := "edited text 1"
+
+	updated, err := clientState1.rpcHead.UpdateMessage(context.Background(), &pb.UpdateMessageRequest{
+		MessageId: msgPosted.Id,
+		Text:      newText1,
+		UserId:    clientState1.User.Id,
+	})
+	if err != nil {
+		t.Fatalf("EditMessage failed: %v", err)
+	}
+	if updated.Text != newText1 {
+		t.Errorf("message text not updated: got %s want %s", updated.Text, newText1)
+	}
+
+	// unauthorised edit test
+	newText2 := "edited text 2"
+
+	_, err = clientState2.rpcHead.UpdateMessage(context.Background(), &pb.UpdateMessageRequest{
+		MessageId: msgPosted.Id,
+		Text:      newText2,
+		UserId:    clientState2.User.Id,
+	})
+	if err == nil {
+		t.Fatalf("message edited by user who is not the author")
+	}
+
+	messages := getMessages(t, clientState1, topic.Id)
+	index := -1
+	found := false
+	for i, m := range messages {
+		if m.Id == msgPosted.Id {
+			found = true
+			index = i
+			break
+		}
+	}
+	if !found {
+		t.Errorf("posted message with ID %d not found in GetMessages response", msgPosted.Id)
+	}
+	if messages[index].Text == newText2 {
+		t.Errorf("message edited by user who is not the author")
 	}
 }
 
