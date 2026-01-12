@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	pb "razpravljalnica/proto"
+
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestPostMessage(t *testing.T) {
@@ -248,6 +250,50 @@ func TestCreateUser(t *testing.T) {
 
 	if len(server.users) != 1 {
 		t.Errorf("expected still 1 user stored, got %d", len(server.users))
+	}
+}
+
+func TestListTopics(t *testing.T) {
+	server := newMessageBoardServer("test", "node-1", true, true)
+
+	// prazen seznam
+	res, err := server.ListTopics(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("ListTopics returned error: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected response, got nil")
+	}
+	if len(res.Topics) != 0 {
+		t.Errorf("expected 0 topics, got %d", len(res.Topics))
+	}
+
+	// dodamo 2 topica
+	topic1 := server.createTopic(t, "topic-1")
+	topic2 := server.createTopic(t, "topic-2")
+
+	res, err = server.ListTopics(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("ListTopics returned error: %v", err)
+	}
+	if len(res.Topics) != 2 {
+		t.Fatalf("expected 2 topics, got %d", len(res.Topics))
+	}
+
+	// preverimo vsebino
+	storedTopics := make(map[int64]string)
+	for _, topic := range res.Topics {
+		storedTopics[topic.Id] = topic.Name
+	}
+
+	expected := make(map[int64]string)
+	expected[topic1.Id] = topic1.Name
+	expected[topic2.Id] = topic2.Name
+
+	for id, name := range expected {
+		if storedTopics[id] != name {
+			t.Errorf("topic mismatch for id %d: got %q want %q", id, storedTopics[id], name)
+		}
 	}
 }
 
