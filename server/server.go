@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	pb "razpravljalnica/proto"
+	"sort"
 	"time"
 
 	"slices"
@@ -38,6 +39,7 @@ type MessageBoardServer struct {
 	nextTopicID   int64
 	messages      map[int64]*pb.Message
 	nextMessageID int64
+	likedBy       map[int64]map[int64]bool // message id -> user id -> bool ali je že lajkal
 	users         map[int64]*pb.User
 	nextUserID    int64
 	// subscribe stvari
@@ -77,6 +79,7 @@ func newMessageBoardServer(url string, id string, isHead bool, isTail bool) *Mes
 		nextMessageID:      1,
 		users:              make(map[int64]*pb.User, 0),
 		nextUserID:         1,
+		likedBy:            make(map[int64]map[int64]bool),
 		subscribers:        make(map[int64][]chan *pb.MessageEvent),
 		nextSeqNum:         1,
 		subscribersPerNode: make(map[string]int64),            // kolk je subscriberjov na posamznem nodeu. sicer ga rabi samo head, ampak zaenkrat tkole
@@ -329,6 +332,16 @@ func (server *MessageBoardServer) PostMessage(ctx context.Context, req *pb.PostM
 
 func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.UpdateMessageRequest) (*pb.Message, error) {
 
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+
+	if msg.UserId != req.UserId {
+		fmt.Printf("UPDATE MESSAGE ATTEMPT ON MESSAGE %d BY USER WITH ID %d, BUT THEY ARE NOT THE AUTHOR\n", req.MessageId, req.UserId)
+		return nil, fmt.Errorf("unathorised update message attempt")
+	}
+
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.UpdateMessage(ctx, req)
 
@@ -340,10 +353,6 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
-	msg := server.messages[req.MessageId]
-	if msg == nil {
-		return nil, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
-	}
 	oldText := msg.Text
 	server.messages[req.MessageId].Text = req.Text
 	fmt.Printf("MESSAGE [%d] '%s' UPDATED TO: %s\n", req.MessageId, oldText, server.messages[req.MessageId].Text)
@@ -354,6 +363,17 @@ func (server *MessageBoardServer) UpdateMessage(ctx context.Context, req *pb.Upd
 }
 
 func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.DeleteMessageRequest) (*emptypb.Empty, error) {
+
+	msg := server.messages[req.MessageId]
+	if msg == nil {
+		fmt.Printf("DELETE MESSAGE ATTEMPT BY USER WITH ID %d, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, req.MessageId)
+		return &emptypb.Empty{}, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
+	}
+
+	if msg.UserId != req.UserId {
+		fmt.Printf("DELETE MESSAGE ATTEMPT ON MESSAGE %d BY USER WITH ID %d, BUT THEY ARE NOT THE AUTHOR\n", req.MessageId, req.UserId)
+		return nil, fmt.Errorf("unathorised delete message attempt")
+	}
 
 	if server.nodeNext != nil {
 		_, err := server.nodeNext.rpc.DeleteMessage(ctx, req)
@@ -366,11 +386,6 @@ func (server *MessageBoardServer) DeleteMessage(ctx context.Context, req *pb.Del
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
-	msg := server.messages[req.MessageId]
-	if msg == nil {
-		fmt.Printf("DELETE MESSAGE ATTEMPT BY [%d] %s, BUT MESSAGE WITH ID %d DOES NOT EXIST\n", req.UserId, server.users[req.UserId].Name, req.MessageId)
-		return &emptypb.Empty{}, fmt.Errorf("Message with id %d does not exist\n", req.MessageId)
-	}
 	delete(server.messages, req.MessageId)
 	fmt.Printf("MESSAGE WITH ID %d DELETED\n", req.MessageId)
 	// same here
@@ -394,7 +409,7 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
 	topic_id := req.TopicId
 	message_id := req.MessageId
-	// user_id  := req.UserId
+	user_id := req.UserId
 
 	message, ok := server.messages[message_id]
 	if !ok {
@@ -403,6 +418,22 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 		return nil, fmt.Errorf("message with id %d not found", message_id)
 	}
 
+	// preverimo da ne poskuša likeat svoje sporočilo
+	if message.UserId == user_id {
+		return nil, fmt.Errorf("can't like your own message")
+	}
+
+	// inicializiramo mapo za likes
+	if server.likedBy[req.MessageId] == nil {
+		server.likedBy[req.MessageId] = make(map[int64]bool)
+	}
+
+	// preverimo ali je uporabnik že likeal ta message
+	if server.likedBy[req.MessageId][req.UserId] {
+		return nil, fmt.Errorf("user %d already liked message %d", req.UserId, req.MessageId)
+	}
+
+	server.likedBy[req.MessageId][req.UserId] = true
 	message.Likes += 1
 
 	fmt.Printf("SUCCCESSFULLY LIKED A MESSAGE WITH ID %d FROM TOPIC WITH ID %d\n", message_id, topic_id)
@@ -444,17 +475,27 @@ func (server *MessageBoardServer) GetMessages(ctx context.Context, req *pb.GetMe
 		messages_slice = make([]*pb.Message, 0)
 	}
 
-	i := int32(0)
+	//i := int32(0)
 
 	for _, message := range server.messages {
 		if message.TopicId != topic_id || message.Id < from_id {
 			continue
 		}
-		if limit != -1 && i >= limit {
+		/*if limit != -1 && i >= limit {
 			break
-		}
+		}*/
 		messages_slice = append(messages_slice, message)
-		i++
+		//i++
+	}
+
+	// sortiramo po času
+	sort.Slice(messages_slice, func(i, j int) bool {
+		return messages_slice[i].CreatedAt.AsTime().Before(messages_slice[j].CreatedAt.AsTime())
+	})
+
+	// uporabimo limit po sortiranju
+	if limit > 0 && int32(len(messages_slice)) > limit {
+		messages_slice = messages_slice[:limit]
 	}
 
 	response := &pb.GetMessagesResponse{
@@ -476,6 +517,7 @@ var nodeAdresses = map[string]string{
 	"4": "localhost:9879",
 }
 
+// dela orchestrator
 func (server *MessageBoardServer) GetSubscriptionNode(ctx context.Context, req *pb.SubscriptionNodeRequest) (*pb.SubscriptionNodeResponse, error) {
 	if !server.isHead {
 		return nil, fmt.Errorf("can't request subscription node from non-head node")
@@ -586,6 +628,18 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 			fmt.Printf("USER [%d] UNSUBSCRIBED FROM TOPIC [%d]\n", req.UserId, req.TopicId[0])
 		}
 		server.subscribersMu.Unlock()
+
+		// nov ctx ker stream.Context() je bil prekinjen z .Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, err := server.orchClient.ExpireSubscription(ctx, &pb.ExpireSubscriptionRequest{
+			Token:  req.SubscribeToken,
+			UserId: req.UserId,
+			NodeId: server.id,
+		})
+		if err != nil {
+			fmt.Printf("ERROR EXPIERING USER [%d]'S SUBSCRIPTION TO TOPIC [%d]: %s\n", req.UserId, req.TopicId[0], err)
+		}
 		close(ch)
 	}()
 
@@ -602,6 +656,7 @@ func (server *MessageBoardServer) SubscribeTopic(req *pb.SubscribeTopicRequest, 
 	}
 }
 
+// dela orchestrator
 func (server *MessageBoardServer) VerifyToken(ctx context.Context, req *pb.VerifyTokenRequest) (*pb.VerifyTokenResponse, error) {
 	server.mu.RLock()
 	defer server.mu.RUnlock()
@@ -619,6 +674,7 @@ func (server *MessageBoardServer) VerifyToken(ctx context.Context, req *pb.Verif
 	return server.nodePrev.rpc.VerifyToken(ctx, req)
 }
 
+// dela orchestrator
 func (server *MessageBoardServer) ExpireSubscription(ctx context.Context, req *pb.ExpireSubscriptionRequest) (*emptypb.Empty, error) {
 	if !server.isHead {
 		return nil, fmt.Errorf("Non head node")
@@ -684,7 +740,7 @@ func (server *MessageBoardServer) heartbeatLoop() {
 		subCount := int32(0)
 
 		for _, subs := range server.subscribers {
-			subCount += int32(len(subs))
+			subCount = int32(len(subs))
 		}
 		server.subscribersMu.RUnlock()
 
@@ -733,3 +789,22 @@ func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
 
 // MESSAGEBOARD SERVER FUNKCIJE
 // =============================================
+
+// za test
+func (server *MessageBoardServer) GetSubscriptions(ctx context.Context, req *emptypb.Empty) (*pb.GetSubscriptionsResponse, error) {
+	/*subs := make([]*pb.SubscriptionInfo, 0)
+	for _, subsscription := range server.subscriptions {
+		subs = append(subs, &pb.SubscriptionInfo{
+			UserId:  subsscription.userId,
+			TopicId: subsscription.topicId,
+			NodeId:  subsscription.nodeId,
+		})
+	}
+	res := &pb.GetSubscriptionsResponse{
+		Subscriptions: subs,
+	}
+	return res, nil*/
+	return &pb.GetSubscriptionsResponse{
+		SubscriberCount: int32(len(server.subscribers)),
+	}, nil
+}

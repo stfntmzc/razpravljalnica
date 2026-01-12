@@ -98,6 +98,8 @@ service  MessageBoard{
   rpc ExpireSubscription(ExpireSubscriptionRequest) returns (google.protobuf.Empty);
   // za dobivanje usernamea
   rpc GetUser(GetUserRequest) returns (User);
+  // za dobivanje informacij o subscriptionih za test
+  rpc GetSubscriptions(google.protobuf.Empty) returns (GetSubscriptionsResponse);
 }
 
 message CreateUserRequest {
@@ -195,6 +197,16 @@ message GetUserRequest {
   int64 user_id = 2;
 }
 
+message GetSubscriptionsResponse {
+  int32 subscriber_count = 1;
+}
+
+message SubscriptionInfo {
+  int64 user_id = 1;
+  string node_id = 2;
+  int64 topic_id = 3;
+}
+
 //message GetUserResponse {
 //  User user = 1;
 //}
@@ -224,6 +236,11 @@ service Orchestrator {
     rpc GetSubscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
     rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
     rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse);
+    // dodano
+    rpc ExpireSubscription(ExpireSubscriptionRequest) returns (google.protobuf.Empty);
+    // za test
+    rpc GetSubscriptionsOnNode(GetSubscriptionsOnNodeRequest) returns (GetSubscriptionsOnNodeResponse);
+    rpc GetValidTokens(google.protobuf.Empty) returns (GetSubscriptionsOnNodeResponse);
 }
 
 message RegisterNodeRequest {
@@ -257,4 +274,13 @@ message JoinClusterRequest {
 message JoinClusterResponse {
     bool success = 1;
     string error = 2;
+}
+
+// za test
+message GetSubscriptionsOnNodeResponse {
+  int32 subscriber_count = 1;
+}
+
+message GetSubscriptionsOnNodeRequest {
+  string node = 1;
 }
