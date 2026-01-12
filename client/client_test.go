@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	pb "razpravljalnica/proto"
 	"testing"
 
@@ -48,15 +49,16 @@ func TestPostMessage(t *testing.T) {
 	}
 
 	// preverimo da je message shranjen na serverju z GetMessages
-	getReq := &pb.GetMessagesRequest{
+	/*getReq := &pb.GetMessagesRequest{
 		TopicId: req.TopicId,
 	}
 	getResp, err := clientState.rpcHead.GetMessages(clientState.Ctx, getReq)
 	if err != nil {
 		t.Fatalf("GetMessages returned error: %v", err)
-	}
+	}*/
+	messages := getMessages(t, clientState, req.TopicId)
 	found := false
-	for _, m := range getResp.Messages {
+	for _, m := range messages {
 		if m.Id == msg.Id {
 			found = true
 			break
@@ -112,6 +114,77 @@ func TestCreateTopic(t *testing.T) {
 	}
 }
 
+func TestLikeMessage(t *testing.T) {
+	// naredimo 2 uporabnika
+	clientState1, err := ConnectToServer("localhost:8000", "test like message user 1")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState1.ConnHead.Close()
+	defer clientState1.ConnTail.Close()
+
+	clientState2, err := ConnectToServer("localhost:8000", "test like message user 2")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState2.ConnHead.Close()
+	defer clientState2.ConnTail.Close()
+
+	// naredimo topic in sporočilo
+	topic := createTopic(t, clientState1, "test like message topic")
+	text1 := "test text 1"
+	msgPosted := postMessage(t, clientState1, topic.Id, text1)
+
+	// likeamo
+	msgRecived1, err := clientState2.rpcHead.LikeMessage(context.Background(), &pb.LikeMessageRequest{
+		MessageId: msgPosted.Id,
+		UserId:    clientState2.User.Id,
+	})
+	if err != nil {
+		t.Fatalf("LikeMessage failed: %v", err)
+	}
+
+	// likeamo ponovno (nebi smelo pustit)
+	_, err = clientState2.rpcHead.LikeMessage(context.Background(), &pb.LikeMessageRequest{
+		MessageId: msgPosted.Id,
+		UserId:    clientState2.User.Id,
+	})
+	if err == nil {
+		t.Fatalf("Message liked twice by the same user")
+	}
+
+	// poskus likea sam svojega sporočila
+	_, err = clientState1.rpcHead.LikeMessage(context.Background(), &pb.LikeMessageRequest{
+		MessageId: msgPosted.Id,
+		UserId:    clientState1.User.Id,
+	})
+	if err == nil {
+		t.Fatalf("Message liked by author")
+	}
+
+	// preverjanje id, št likeov
+	messages := getMessages(t, clientState1, topic.Id)
+	index := -1
+	found := false
+	for i, m := range messages {
+		if m.Id == msgRecived1.Id {
+			found = true
+			index = i
+			break
+		}
+	}
+	if !found {
+		t.Errorf("posted message with ID %d not found in GetMessages response", msgPosted.Id)
+	}
+
+	if messages[index].Id != msgPosted.Id {
+		t.Errorf("expected message id %d, got %d", msgPosted.Id, messages[index].Id)
+	}
+	if messages[index].Likes != 1 {
+		t.Errorf("expected 1 like, got %d", messages[index].Likes)
+	}
+}
+
 // helpers
 
 func createTopic(t *testing.T, clientState *ClientState, name string) *pb.Topic {
@@ -125,6 +198,32 @@ func createTopic(t *testing.T, clientState *ClientState, name string) *pb.Topic 
 		t.Fatalf("CreateTopic returned error: %v", err)
 	}
 	return topic
+}
+
+func postMessage(t *testing.T, clientState *ClientState, topicId int64, text string) *pb.Message {
+	t.Helper()
+	req := &pb.PostMessageRequest{
+		UserId:  clientState.User.Id,
+		TopicId: topicId,
+		Text:    text,
+	}
+	message, err := clientState.rpcHead.PostMessage(clientState.Ctx, req)
+	if err != nil {
+		t.Fatalf("PostMessage returned error: %v", err)
+		return nil
+	}
+	return message
+}
+
+func getMessages(t *testing.T, clientState *ClientState, topicId int64) []*pb.Message {
+	getReq := &pb.GetMessagesRequest{
+		TopicId: topicId,
+	}
+	getResp, err := clientState.rpcHead.GetMessages(clientState.Ctx, getReq)
+	if err != nil {
+		t.Fatalf("GetMessages returned error: %v", err)
+	}
+	return getResp.Messages
 }
 
 func getTopics(t *testing.T, clientState *ClientState) []*pb.Topic {

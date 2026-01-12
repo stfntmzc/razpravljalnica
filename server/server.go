@@ -409,13 +409,18 @@ func (server *MessageBoardServer) LikeMessage(ctx context.Context, req *pb.LikeM
 	// zacommentano ce bi pol rabla se obvestit kdo ti je lajkal al pa kaj
 	topic_id := req.TopicId
 	message_id := req.MessageId
-	// user_id  := req.UserId
+	user_id := req.UserId
 
 	message, ok := server.messages[message_id]
 	if !ok {
 		// message ne obstaja
 		fmt.Printf("CAN'T LIKE MESSAGE WITH ID %d BECAUSE IT DOESN'T EXIST\n", message_id)
 		return nil, fmt.Errorf("message with id %d not found", message_id)
+	}
+
+	// preverimo da ne poskuša likeat svoje sporočilo
+	if message.UserId == user_id {
+		return nil, fmt.Errorf("can't like your own message")
 	}
 
 	// inicializiramo mapo za likes
