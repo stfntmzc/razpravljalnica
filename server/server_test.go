@@ -45,7 +45,7 @@ func TestPostMessage(t *testing.T) {
 		t.Errorf("topicId mismatch: got %d want %d", msg.TopicId, req.TopicId)
 	}
 
-	// preverimo da je message res shranjen v server.messages
+	// preverimo da je message shranjen v server.messages
 	if len(server.messages) != 1 {
 		t.Errorf("expected 1 message stored, got %d", len(server.messages))
 	}

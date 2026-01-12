@@ -64,7 +64,7 @@ func ClientUi(orchestratorAddr string, username string) (*ClientState, error) {
 	initCommandHandlers()
 
 	// povežemo se na strežnik
-	clientState, err := connectToServer(orchestratorAddr, username)
+	clientState, err := ConnectToServer(orchestratorAddr, username)
 	if err != nil {
 		panic(err)
 	}
@@ -78,7 +78,7 @@ func Client(orchestratorAddr string, username string) {
 	initCommandHandlers()
 
 	// povežemo se na strežnik
-	clientState, err := connectToServer(orchestratorAddr, username)
+	clientState, err := ConnectToServer(orchestratorAddr, username)
 	if err != nil {
 		panic(err)
 	}
@@ -774,7 +774,7 @@ func SubscribeToTopic(clientState *ClientState, topicId int64) error {
 
 // poveze se preko orchestratorja, ne preko serverja
 // na zacetku na login screenu je treba podati samo address od orchestratorja (ponavadi localhost:8000) in username
-func connectToServer(orchestratorAddr string, username string) (*ClientState, error) {
+func ConnectToServer(orchestratorAddr string, username string) (*ClientState, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// connectas na orchestrator
