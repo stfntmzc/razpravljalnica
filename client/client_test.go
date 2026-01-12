@@ -341,7 +341,7 @@ func TestCreateUser(t *testing.T) {
 
 func TestListTopics(t *testing.T) {
 
-	clientState, err := ConnectToServer("localhost:8000", "test create user user")
+	clientState, err := ConnectToServer("localhost:8000", "test list topics user")
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
 	}
@@ -388,6 +388,89 @@ func TestListTopics(t *testing.T) {
 	}
 	if res.Topics[lenPrev+1].Name != topic2.Name {
 		t.Errorf("expected topic name %s, got %s", topic2.Name, res.Topics[lenPrev+1].Name)
+	}
+}
+
+func TestGetMessages(t *testing.T) {
+	clientState, err := ConnectToServer("localhost:8000", "test get messages user")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState.ConnHead.Close()
+	defer clientState.ConnTail.Close()
+
+	// naredimo topic
+	topic := createTopic(t, clientState, "test get messages topic")
+
+	// ni še sporočil
+	res, err := clientState.rpcTail.GetMessages(context.Background(), &pb.GetMessagesRequest{
+		TopicId: topic.Id,
+	})
+	if err != nil {
+		t.Fatalf("GetMessages returned error: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected response, got nil")
+	}
+	if len(res.Messages) != 0 {
+		t.Fatalf("expected 0 messages, got %d", len(res.Messages))
+	}
+
+	// dodamo 2 sporočila
+	text1 := "message 1"
+	text2 := "message 2"
+	msg1 := postMessage(t, clientState, topic.Id, text1)
+	msg2 := postMessage(t, clientState, topic.Id, text2)
+
+	messages, err := clientState.rpcTail.GetMessages(context.Background(), &pb.GetMessagesRequest{
+		TopicId: topic.Id,
+		Limit:   50,
+	})
+	if err != nil {
+		t.Fatalf("GetMessages returned error: %v", err)
+	}
+	if messages == nil {
+		t.Fatalf("expected response, got nil")
+	}
+	if len(messages.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages.Messages))
+	}
+
+	// sprtiramo
+	sort.Slice(messages.Messages, func(i, j int) bool {
+		return messages.Messages[i].Id < messages.Messages[j].Id
+	})
+
+	// preverjamo id
+	if messages.Messages[0].Id != msg1.Id {
+		t.Errorf("expected MessageId %d, got %d", msg1.Id, messages.Messages[0].Id)
+	}
+	if messages.Messages[1].Id != msg2.Id {
+		t.Errorf("expected MessageId %d, got %d", msg2.Id, messages.Messages[1].Id)
+	}
+
+	// preverjamo topic
+	if messages.Messages[0].TopicId != topic.Id {
+		t.Errorf("expected TopicId %d, got %d", topic.Id, messages.Messages[0].TopicId)
+	}
+	if messages.Messages[1].TopicId != topic.Id {
+		t.Errorf("expected TopicId %d, got %d", topic.Id, messages.Messages[1].TopicId)
+	}
+
+	// preverjamo vsebino
+	if messages.Messages[0].Text != text1 {
+		t.Errorf("expected Text %s, got %s", text1, messages.Messages[0].Text)
+	}
+	if messages.Messages[1].Text != text2 {
+		t.Errorf("expected Text %s, got %s", text2, messages.Messages[1].Text)
+	}
+
+	// preverjamo uporabnika
+	if messages.Messages[0].UserId != clientState.User.Id {
+		t.Errorf("expected UserId 1, got %d", messages.Messages[0].UserId)
+	}
+	if messages.Messages[1].UserId != clientState.User.Id {
+		t.Errorf("expected UserId 1, got %d", messages.Messages[1].UserId)
 	}
 }
 
