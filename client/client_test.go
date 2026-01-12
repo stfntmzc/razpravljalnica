@@ -312,6 +312,32 @@ func TestDeleteMessage(t *testing.T) {
 	}
 }
 
+func TestCreateUser(t *testing.T) {
+	// prvi create
+	clientState1, err := ConnectToServer("localhost:8000", "test create user user")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState1.ConnHead.Close()
+	defer clientState1.ConnTail.Close()
+
+	// druge create (login)
+	clientState2, err := ConnectToServer("localhost:8000", "test create user user")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState2.ConnHead.Close()
+	defer clientState2.ConnTail.Close()
+
+	// preverimo id in ime
+	if clientState1.User.Id != clientState2.User.Id {
+		t.Errorf("user id mismatch: got %d want %d", clientState1.User.Id, clientState2.User.Id)
+	}
+	if clientState1.User.Name != clientState2.User.Name {
+		t.Errorf("user name mismatch: got %s want %s", clientState1.User.Name, clientState2.User.Name)
+	}
+}
+
 // helpers
 
 func createTopic(t *testing.T, clientState *ClientState, name string) *pb.Topic {
