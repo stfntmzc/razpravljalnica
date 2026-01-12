@@ -285,6 +285,8 @@ func (o *Orchestrator) VerifyToken(ctx context.Context, req *pb.VerifyTokenReque
 		return &pb.VerifyTokenResponse{Valid: false}, nil
 	}
 
+	//o.fsm.nodeSubs[tokenInfo.NodeId]++
+
 	return &pb.VerifyTokenResponse{Valid: true}, nil
 }
 
@@ -395,4 +397,36 @@ func (o *Orchestrator) JoinCluster(ctx context.Context, req *pb.JoinClusterReque
 	fmt.Printf("Node %s joined cluster at %s\n", req.NodeId, req.RaftAddress)
 
 	return &pb.JoinClusterResponse{Success: true}, nil
+}
+
+// za test
+
+func (o *Orchestrator) GetSubscriptionsOnNode(ctx context.Context, req *pb.GetSubscriptionsOnNodeRequest) (*pb.GetSubscriptionsOnNodeResponse, error) {
+	o.fsm.mu.RLock()
+	defer o.fsm.mu.RUnlock()
+	return &pb.GetSubscriptionsOnNodeResponse{
+		SubscriberCount: o.fsm.nodeSubs[req.Node],
+	}, nil
+
+	/*o.fsm.mu.RLock()
+	defer o.fsm.mu.RUnlock()
+
+	var count int32 = 0
+	for _, token := range o.fsm.validTokens {
+		if token.NodeId == req.Node {
+			count++
+		}
+	}
+
+	return &pb.GetSubscriptionsOnNodeResponse{
+		SubscriberCount: count,
+	}, nil*/
+}
+
+func (o *Orchestrator) GetValidTokens(ctx context.Context, req *emptypb.Empty) (*pb.GetSubscriptionsOnNodeResponse, error) {
+	o.fsm.mu.RLock()
+	defer o.fsm.mu.RUnlock()
+	return &pb.GetSubscriptionsOnNodeResponse{
+		SubscriberCount: int32(len(o.fsm.validTokens)),
+	}, nil
 }

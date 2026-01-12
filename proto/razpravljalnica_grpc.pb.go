@@ -36,6 +36,7 @@ const (
 	MessageBoard_VerifyToken_FullMethodName         = "/razpravljalnica.MessageBoard/VerifyToken"
 	MessageBoard_ExpireSubscription_FullMethodName  = "/razpravljalnica.MessageBoard/ExpireSubscription"
 	MessageBoard_GetUser_FullMethodName             = "/razpravljalnica.MessageBoard/GetUser"
+	MessageBoard_GetSubscriptions_FullMethodName    = "/razpravljalnica.MessageBoard/GetSubscriptions"
 )
 
 // MessageBoardClient is the client API for MessageBoard service.
@@ -71,6 +72,8 @@ type MessageBoardClient interface {
 	ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// za dobivanje usernamea
 	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*User, error)
+	// za dobivanje informacij o subscriptionih za test
+	GetSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetSubscriptionsResponse, error)
 }
 
 type messageBoardClient struct {
@@ -230,6 +233,16 @@ func (c *messageBoardClient) GetUser(ctx context.Context, in *GetUserRequest, op
 	return out, nil
 }
 
+func (c *messageBoardClient) GetSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetSubscriptionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, MessageBoard_GetSubscriptions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageBoardServer is the server API for MessageBoard service.
 // All implementations must embed UnimplementedMessageBoardServer
 // for forward compatibility.
@@ -263,6 +276,8 @@ type MessageBoardServer interface {
 	ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error)
 	// za dobivanje usernamea
 	GetUser(context.Context, *GetUserRequest) (*User, error)
+	// za dobivanje informacij o subscriptionih za test
+	GetSubscriptions(context.Context, *emptypb.Empty) (*GetSubscriptionsResponse, error)
 	mustEmbedUnimplementedMessageBoardServer()
 }
 
@@ -314,6 +329,9 @@ func (UnimplementedMessageBoardServer) ExpireSubscription(context.Context, *Expi
 }
 func (UnimplementedMessageBoardServer) GetUser(context.Context, *GetUserRequest) (*User, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
+}
+func (UnimplementedMessageBoardServer) GetSubscriptions(context.Context, *emptypb.Empty) (*GetSubscriptionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSubscriptions not implemented")
 }
 func (UnimplementedMessageBoardServer) mustEmbedUnimplementedMessageBoardServer() {}
 func (UnimplementedMessageBoardServer) testEmbeddedByValue()                      {}
@@ -581,6 +599,24 @@ func _MessageBoard_GetUser_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessageBoard_GetSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageBoardServer).GetSubscriptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageBoard_GetSubscriptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageBoardServer).GetSubscriptions(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessageBoard_ServiceDesc is the grpc.ServiceDesc for MessageBoard service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -639,6 +675,10 @@ var MessageBoard_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUser",
 			Handler:    _MessageBoard_GetUser_Handler,
+		},
+		{
+			MethodName: "GetSubscriptions",
+			Handler:    _MessageBoard_GetSubscriptions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -758,13 +798,15 @@ var ControlPlane_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	Orchestrator_RegisterNode_FullMethodName        = "/razpravljalnica.Orchestrator/RegisterNode"
-	Orchestrator_Heartbeat_FullMethodName           = "/razpravljalnica.Orchestrator/Heartbeat"
-	Orchestrator_GetClusterState_FullMethodName     = "/razpravljalnica.Orchestrator/GetClusterState"
-	Orchestrator_GetSubscriptionNode_FullMethodName = "/razpravljalnica.Orchestrator/GetSubscriptionNode"
-	Orchestrator_VerifyToken_FullMethodName         = "/razpravljalnica.Orchestrator/VerifyToken"
-	Orchestrator_JoinCluster_FullMethodName         = "/razpravljalnica.Orchestrator/JoinCluster"
-	Orchestrator_ExpireSubscription_FullMethodName  = "/razpravljalnica.Orchestrator/ExpireSubscription"
+	Orchestrator_RegisterNode_FullMethodName           = "/razpravljalnica.Orchestrator/RegisterNode"
+	Orchestrator_Heartbeat_FullMethodName              = "/razpravljalnica.Orchestrator/Heartbeat"
+	Orchestrator_GetClusterState_FullMethodName        = "/razpravljalnica.Orchestrator/GetClusterState"
+	Orchestrator_GetSubscriptionNode_FullMethodName    = "/razpravljalnica.Orchestrator/GetSubscriptionNode"
+	Orchestrator_VerifyToken_FullMethodName            = "/razpravljalnica.Orchestrator/VerifyToken"
+	Orchestrator_JoinCluster_FullMethodName            = "/razpravljalnica.Orchestrator/JoinCluster"
+	Orchestrator_ExpireSubscription_FullMethodName     = "/razpravljalnica.Orchestrator/ExpireSubscription"
+	Orchestrator_GetSubscriptionsOnNode_FullMethodName = "/razpravljalnica.Orchestrator/GetSubscriptionsOnNode"
+	Orchestrator_GetValidTokens_FullMethodName         = "/razpravljalnica.Orchestrator/GetValidTokens"
 )
 
 // OrchestratorClient is the client API for Orchestrator service.
@@ -779,6 +821,9 @@ type OrchestratorClient interface {
 	JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error)
 	// dodano
 	ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// za test
+	GetSubscriptionsOnNode(ctx context.Context, in *GetSubscriptionsOnNodeRequest, opts ...grpc.CallOption) (*GetSubscriptionsOnNodeResponse, error)
+	GetValidTokens(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetSubscriptionsOnNodeResponse, error)
 }
 
 type orchestratorClient struct {
@@ -859,6 +904,26 @@ func (c *orchestratorClient) ExpireSubscription(ctx context.Context, in *ExpireS
 	return out, nil
 }
 
+func (c *orchestratorClient) GetSubscriptionsOnNode(ctx context.Context, in *GetSubscriptionsOnNodeRequest, opts ...grpc.CallOption) (*GetSubscriptionsOnNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSubscriptionsOnNodeResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_GetSubscriptionsOnNode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orchestratorClient) GetValidTokens(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetSubscriptionsOnNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSubscriptionsOnNodeResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_GetValidTokens_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrchestratorServer is the server API for Orchestrator service.
 // All implementations must embed UnimplementedOrchestratorServer
 // for forward compatibility.
@@ -871,6 +936,9 @@ type OrchestratorServer interface {
 	JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error)
 	// dodano
 	ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error)
+	// za test
+	GetSubscriptionsOnNode(context.Context, *GetSubscriptionsOnNodeRequest) (*GetSubscriptionsOnNodeResponse, error)
+	GetValidTokens(context.Context, *emptypb.Empty) (*GetSubscriptionsOnNodeResponse, error)
 	mustEmbedUnimplementedOrchestratorServer()
 }
 
@@ -901,6 +969,12 @@ func (UnimplementedOrchestratorServer) JoinCluster(context.Context, *JoinCluster
 }
 func (UnimplementedOrchestratorServer) ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExpireSubscription not implemented")
+}
+func (UnimplementedOrchestratorServer) GetSubscriptionsOnNode(context.Context, *GetSubscriptionsOnNodeRequest) (*GetSubscriptionsOnNodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSubscriptionsOnNode not implemented")
+}
+func (UnimplementedOrchestratorServer) GetValidTokens(context.Context, *emptypb.Empty) (*GetSubscriptionsOnNodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetValidTokens not implemented")
 }
 func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
 func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
@@ -1049,6 +1123,42 @@ func _Orchestrator_ExpireSubscription_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Orchestrator_GetSubscriptionsOnNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSubscriptionsOnNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).GetSubscriptionsOnNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_GetSubscriptionsOnNode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).GetSubscriptionsOnNode(ctx, req.(*GetSubscriptionsOnNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Orchestrator_GetValidTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrchestratorServer).GetValidTokens(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Orchestrator_GetValidTokens_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrchestratorServer).GetValidTokens(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Orchestrator_ServiceDesc is the grpc.ServiceDesc for Orchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1083,6 +1193,14 @@ var Orchestrator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExpireSubscription",
 			Handler:    _Orchestrator_ExpireSubscription_Handler,
+		},
+		{
+			MethodName: "GetSubscriptionsOnNode",
+			Handler:    _Orchestrator_GetSubscriptionsOnNode_Handler,
+		},
+		{
+			MethodName: "GetValidTokens",
+			Handler:    _Orchestrator_GetValidTokens_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

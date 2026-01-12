@@ -5,6 +5,7 @@ import (
 	pb "razpravljalnica/proto"
 	"sort"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -471,6 +472,78 @@ func TestGetMessages(t *testing.T) {
 	}
 	if messages.Messages[1].UserId != clientState.User.Id {
 		t.Errorf("expected UserId 1, got %d", messages.Messages[1].UserId)
+	}
+}
+
+func TestSubscribe(t *testing.T) {
+	clientState, err := ConnectToServer("localhost:8000", "test subscribe user")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState.ConnHead.Close()
+	defer clientState.ConnTail.Close()
+
+	topic := createTopic(t, clientState, "test subscribe topic")
+
+	// subscribeamo se na topic
+	err = SubscribeToTopic(clientState, topic.Id)
+	if err != nil {
+		t.Fatalf("Error subscribeing: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// preverimo število naročnin na clientu
+	if len(clientState.Subscriptions) != 1 {
+		t.Errorf("expected 1 subscription, got %d", len(clientState.Subscriptions))
+	}
+
+	// preverimo število naročnin na serverju
+	subCount, err := clientState.Subscriptions[topic.Id].rpcSub.GetSubscriptions(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("Error geting subscritions: %v", err)
+	}
+	if subCount.SubscriberCount != 1 {
+		t.Errorf("expected 1 subscription, got %d", subCount.SubscriberCount)
+	}
+
+	// preverimo št tokenov
+	tokenCount, err := clientState.orchClient.GetValidTokens(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("Error geting subscritions: %v", err)
+	}
+	if tokenCount.SubscriberCount != 1 {
+		t.Errorf("expected 1 subscription, got %d", tokenCount.SubscriberCount)
+	}
+
+	// preverimo unsubscribe
+	clientState.Subscriptions[topic.Id].connSub.Close()
+	delete(clientState.Subscriptions, topic.Id)
+
+	// preverimo število naročnin na clientu
+	if len(clientState.Subscriptions) != 0 {
+		t.Errorf("expected 0 subscriptions, got %d", len(clientState.Subscriptions))
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	// preverimo št tokenov
+	tokenCount, err = clientState.orchClient.GetValidTokens(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("Error geting subscritions: %v", err)
+	}
+	if tokenCount.SubscriberCount != 0 {
+		t.Errorf("expected 0 subscription, got %d", tokenCount.SubscriberCount)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	// preverimo število naročnin na nodeu (preko orchestratorja, ker je povezava zaprta)
+	subCountNode, err := clientState.orchClient.GetSubscriptionsOnNode(context.Background(), &pb.GetSubscriptionsOnNodeRequest{
+		Node: "node-1",
+	})
+	if err != nil {
+		t.Fatalf("Error geting subscrition count from orchestrator: %v", err)
+	}
+	if subCountNode.SubscriberCount != 0 {
+		t.Errorf("expected 0 subscriptions, got %d", subCountNode.SubscriberCount)
 	}
 }
 

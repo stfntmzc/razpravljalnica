@@ -741,7 +741,7 @@ func (server *MessageBoardServer) heartbeatLoop() {
 		subCount := int32(0)
 
 		for _, subs := range server.subscribers {
-			subCount += int32(len(subs))
+			subCount = int32(len(subs))
 		}
 		server.subscribersMu.RUnlock()
 
@@ -777,3 +777,22 @@ func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
 
 // MESSAGEBOARD SERVER FUNKCIJE
 // =============================================
+
+// za test
+func (server *MessageBoardServer) GetSubscriptions(ctx context.Context, req *emptypb.Empty) (*pb.GetSubscriptionsResponse, error) {
+	/*subs := make([]*pb.SubscriptionInfo, 0)
+	for _, subsscription := range server.subscriptions {
+		subs = append(subs, &pb.SubscriptionInfo{
+			UserId:  subsscription.userId,
+			TopicId: subsscription.topicId,
+			NodeId:  subsscription.nodeId,
+		})
+	}
+	res := &pb.GetSubscriptionsResponse{
+		Subscriptions: subs,
+	}
+	return res, nil*/
+	return &pb.GetSubscriptionsResponse{
+		SubscriberCount: int32(len(server.subscribers)),
+	}, nil
+}
