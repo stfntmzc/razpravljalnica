@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	pb "razpravljalnica/proto"
+	"sort"
 	"testing"
 
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -335,6 +336,58 @@ func TestCreateUser(t *testing.T) {
 	}
 	if clientState1.User.Name != clientState2.User.Name {
 		t.Errorf("user name mismatch: got %s want %s", clientState1.User.Name, clientState2.User.Name)
+	}
+}
+
+func TestListTopics(t *testing.T) {
+
+	clientState, err := ConnectToServer("localhost:8000", "test create user user")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState.ConnHead.Close()
+	defer clientState.ConnTail.Close()
+
+	//še brez novih topicov
+	res, err := clientState.rpcTail.ListTopics(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("ListTopics returned error: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected response, got nil")
+	}
+	lenPrev := len(res.Topics)
+
+	// dodamo 2 topica
+	topic1 := createTopic(t, clientState, "topic-1")
+	topic2 := createTopic(t, clientState, "topic-2")
+
+	res, err = clientState.rpcTail.ListTopics(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("ListTopics returned error: %v", err)
+	}
+	if len(res.Topics) != lenPrev+2 {
+		t.Fatalf("expected %d topics, got %d", lenPrev+2, len(res.Topics))
+	}
+
+	// sortiramo
+	sort.Slice(res.Topics, func(i, j int) bool {
+		return res.Topics[i].Id < res.Topics[j].Id
+	})
+
+	// preverimo id
+	if res.Topics[lenPrev+0].Id != topic1.Id {
+		t.Errorf("expected topic id 1, got %d", res.Topics[lenPrev+0].Id)
+	}
+	if res.Topics[lenPrev+1].Id != topic2.Id {
+		t.Errorf("expected topic id 2, got %d", res.Topics[lenPrev+1].Id)
+	}
+	// preverimo imena
+	if res.Topics[lenPrev+0].Name != topic1.Name {
+		t.Errorf("expected topic name %s, got %s", topic1.Name, res.Topics[lenPrev+0].Name)
+	}
+	if res.Topics[lenPrev+1].Name != topic2.Name {
+		t.Errorf("expected topic name %s, got %s", topic2.Name, res.Topics[lenPrev+1].Name)
 	}
 }
 
