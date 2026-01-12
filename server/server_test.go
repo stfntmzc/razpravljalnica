@@ -7,6 +7,7 @@ import (
 	pb "razpravljalnica/proto"
 
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestPostMessage(t *testing.T) {
@@ -297,6 +298,73 @@ func TestListTopics(t *testing.T) {
 	}
 }
 
+func TestGetMessages(t *testing.T) {
+	server := newTestServerWithUserAndTopic(t)
+
+	// ni še sporočil
+	res, err := server.GetMessages(context.Background(), &pb.GetMessagesRequest{
+		TopicId: 1,
+	})
+	if err != nil {
+		t.Fatalf("GetMessages returned error: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected response, got nil")
+	}
+	if len(res.Messages) != 0 {
+		t.Fatalf("expected 0 messages, got %d", len(res.Messages))
+	}
+
+	// dodamo sporočila
+	text1 := "message 1"
+	text2 := "message 2"
+
+	server.postMessage(t, 1, 1, text1)
+	server.postMessage(t, 1, 1, text2)
+
+	storedMessages, err := server.GetMessages(context.Background(), &pb.GetMessagesRequest{
+		TopicId: 1,
+		Limit:   50,
+	})
+	if err != nil {
+		t.Fatalf("GetMessages returned error: %v", err)
+	}
+	if storedMessages == nil {
+		t.Fatalf("expected response, got nil")
+	}
+	if len(storedMessages.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(storedMessages.Messages))
+	}
+
+	if storedMessages.Messages[0].Id != 1 {
+		t.Errorf("expected MessageId 1, got %d", storedMessages.Messages[0].Id)
+	}
+	if storedMessages.Messages[1].Id != 2 {
+		t.Errorf("expected MessageId 2, got %d", storedMessages.Messages[1].Id)
+	}
+
+	if storedMessages.Messages[0].TopicId != 1 {
+		t.Errorf("expected TopicId 1, got %d", storedMessages.Messages[0].TopicId)
+	}
+	if storedMessages.Messages[1].TopicId != 1 {
+		t.Errorf("expected TopicId 1, got %d", storedMessages.Messages[1].TopicId)
+	}
+
+	if storedMessages.Messages[0].Text != text1 {
+		t.Errorf("expected Text %s, got %s", text1, storedMessages.Messages[0].Text)
+	}
+	if storedMessages.Messages[1].Text != text2 {
+		t.Errorf("expected Text %s, got %s", text2, storedMessages.Messages[1].Text)
+	}
+
+	if storedMessages.Messages[0].UserId != 1 {
+		t.Errorf("expected UserId 1, got %d", storedMessages.Messages[0].UserId)
+	}
+	if storedMessages.Messages[1].UserId != 1 {
+		t.Errorf("expected UserId 1, got %d", storedMessages.Messages[1].UserId)
+	}
+}
+
 // helpers
 
 func (server *MessageBoardServer) createUser(t *testing.T, username string) *pb.User {
@@ -319,6 +387,21 @@ func (server *MessageBoardServer) createTopic(t *testing.T, name string) *pb.Top
 	server.topics[topic.Id] = topic
 	server.nextTopicID++
 	return topic
+}
+
+func (server *MessageBoardServer) postMessage(t *testing.T, userId int64, topicId int64, text string) *pb.Message {
+	t.Helper()
+	message := &pb.Message{
+		Id:        server.nextMessageID,
+		UserId:    userId,
+		TopicId:   topicId,
+		Text:      text,
+		CreatedAt: timestamppb.Now(),
+		Likes:     0,
+	}
+	server.messages[message.Id] = message
+	server.nextMessageID++
+	return nil
 }
 
 func newTestServerWithUserAndTopic(t *testing.T) *MessageBoardServer {
