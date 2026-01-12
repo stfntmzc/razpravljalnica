@@ -679,7 +679,6 @@ func (server *MessageBoardServer) heartbeatLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 
 	for range ticker.C {
-		// DEBUG: fmt.Println("Sending heartbeat...")
 
 		server.subscribersMu.RLock()
 		subCount := int32(0)
@@ -711,11 +710,9 @@ func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
 	server.isHead = resp.NewRole == "head"
 	server.isTail = resp.NewRole == "tail"
 
-	// Handle new next neighbor
 	if resp.NewNext != "" {
 		go server.connectToNode(resp.NewNext, true)
 	} else if server.isTail {
-		// We became TAIL, no next node
 		if server.nodeNext != nil {
 			server.nodeNext.cancel()
 			server.nodeNext.conn.Close()
@@ -723,11 +720,9 @@ func (server *MessageBoardServer) reconfigure(resp *pb.HeartbeatResponse) {
 		}
 	}
 
-	// Handle new prev neighbor
 	if resp.NewPrev != "" {
 		go server.connectToNode(resp.NewPrev, false)
 	} else if server.isHead {
-		// We became HEAD, no prev node
 		if server.nodePrev != nil {
 			server.nodePrev.cancel()
 			server.nodePrev.conn.Close()

@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-// Tipi komand
 const (
 	CmdRegisterNode = "register_node"
 	CmdHeartbeat    = "heartbeat"
@@ -18,7 +17,6 @@ const (
 	CmdStoreToken   = "store_token"
 )
 
-// Te komande se replicirajo v druge node
 type Command struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
@@ -95,7 +93,6 @@ func (f *FSM) applyRegisterNode(payload json.RawMessage) interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// If there was an old tail, update it to become middle
 	if p.OldTailId != "" {
 		if oldTail, ok := f.nodes[p.OldTailId]; ok {
 			oldTail.Role = "middle"

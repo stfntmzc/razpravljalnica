@@ -162,7 +162,6 @@ func (o *Orchestrator) RegisterNode(ctx context.Context, req *pb.RegisterNodeReq
 
 	o.fsm.mu.Unlock()
 
-	// Apply command through Raft - FSM will handle updating old tail
 	err := o.applyCommand(CmdRegisterNode, RegisterNodePayload{
 		NodeId:    nodeId,
 		Address:   req.Address,
@@ -292,7 +291,6 @@ func (o *Orchestrator) monitorHealth() {
 			continue
 		}
 
-		// Collect dead nodes first (don't hold lock while handling failure)
 		o.fsm.mu.RLock()
 		var deadNodes []string
 		now := time.Now()
@@ -303,7 +301,6 @@ func (o *Orchestrator) monitorHealth() {
 		}
 		o.fsm.mu.RUnlock()
 
-		// Handle failures without holding the lock
 		for _, nodeId := range deadNodes {
 			fmt.Printf("Node %s is DEAD!\n", nodeId)
 			o.handleNodeFailure(nodeId)
@@ -314,7 +311,6 @@ func (o *Orchestrator) monitorHealth() {
 func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 	o.fsm.mu.Lock()
 
-	// Find position and neighbors BEFORE removing
 	idx := -1
 	for i, id := range o.fsm.chainOrder {
 		if id == deadNodeId {
@@ -325,7 +321,7 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 
 	if idx < 0 {
 		o.fsm.mu.Unlock()
-		return // Node already removed or not found
+		return
 	}
 
 	var prevId, nextId string
@@ -340,34 +336,27 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 		nextNode = o.fsm.nodes[nextId]
 	}
 
-	// Remove from chain
 	o.fsm.chainOrder = append(o.fsm.chainOrder[:idx], o.fsm.chainOrder[idx+1:]...)
 	delete(o.fsm.nodes, deadNodeId)
 	delete(o.fsm.nodeHealth, deadNodeId)
 	delete(o.fsm.nodeSubs, deadNodeId)
 
-	// Reconnect neighbors
 	if prevNode != nil && nextNode != nil {
-		// Middle node died - connect prev to next
 		prevNode.NextAddress = nextNode.Address
 		prevNode.Reconfigure = true
 		nextNode.PrevAddress = prevNode.Address
 		nextNode.Reconfigure = true
 	} else if prevNode != nil && nextNode == nil {
-		// TAIL died - prev becomes new TAIL
 		prevNode.NextAddress = ""
 		prevNode.Role = "tail"
 		prevNode.Reconfigure = true
 	} else if prevNode == nil && nextNode != nil {
-		// HEAD died - next becomes new HEAD
 		nextNode.PrevAddress = ""
 		nextNode.Role = "head"
 		nextNode.Reconfigure = true
 	}
 
-	// Make sure roles are correct
 	if len(o.fsm.chainOrder) == 1 {
-		// Only one node left - it's both head and tail
 		o.fsm.nodes[o.fsm.chainOrder[0]].Role = "head"
 	} else if len(o.fsm.chainOrder) > 1 {
 		o.fsm.nodes[o.fsm.chainOrder[0]].Role = "head"
@@ -376,7 +365,6 @@ func (o *Orchestrator) handleNodeFailure(deadNodeId string) {
 
 	o.fsm.mu.Unlock()
 
-	// Apply through Raft (without holding lock)
 	err := o.applyCommand(CmdRemoveNode, RemoveNodePayload{NodeId: deadNodeId})
 	if err != nil {
 		fmt.Printf("Failed to apply remove command: %v\n", err)
