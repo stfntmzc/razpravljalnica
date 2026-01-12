@@ -247,6 +247,71 @@ func TestUpdateMessage(t *testing.T) {
 	}
 }
 
+func TestDeleteMessage(t *testing.T) {
+	// naredimo 2 uporabnika
+	clientState1, err := ConnectToServer("localhost:8000", "test delete message user 1")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState1.ConnHead.Close()
+	defer clientState1.ConnTail.Close()
+
+	clientState2, err := ConnectToServer("localhost:8000", "test delete message user 2")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer clientState2.ConnHead.Close()
+	defer clientState2.ConnTail.Close()
+
+	// naredimo topic in sporočilo
+	topic := createTopic(t, clientState1, "test delete message topic")
+	text1 := "test text 1"
+	msgPosted := postMessage(t, clientState1, topic.Id, text1)
+
+	// poskušamo brisat z drugim uporabnikom
+	_, err = clientState2.rpcHead.DeleteMessage(context.Background(), &pb.DeleteMessageRequest{
+		MessageId: msgPosted.Id,
+		UserId:    clientState2.User.Id,
+	})
+	if err == nil {
+		t.Fatalf("error deleting with wrong user: %s", err)
+	}
+	// preverimo če je bil zvrisan
+	messages := getMessages(t, clientState1, topic.Id)
+	found := false
+	for _, m := range messages {
+		if m.Id == msgPosted.Id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("message deleted by user who is not the author")
+	}
+
+	// zbrišemo z pravim uporabnikom
+	_, err = clientState1.rpcHead.DeleteMessage(context.Background(), &pb.DeleteMessageRequest{
+		MessageId: msgPosted.Id,
+		UserId:    clientState1.User.Id,
+	})
+	if err != nil {
+		t.Fatalf("error deleting message: %v", err)
+	}
+
+	// preverimo ali je zbrisan
+	messages = getMessages(t, clientState1, topic.Id)
+	found = false
+	for _, m := range messages {
+		if m.Id == msgPosted.Id {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Fatalf("message not deleted")
+	}
+}
+
 // helpers
 
 func createTopic(t *testing.T, clientState *ClientState, name string) *pb.Topic {
