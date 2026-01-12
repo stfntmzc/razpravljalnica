@@ -207,6 +207,50 @@ func TestDeleteMessage(t *testing.T) {
 	}
 }
 
+func TestCreateUser(t *testing.T) {
+	server := newMessageBoardServer("test", "node-1", true, true)
+
+	req := &pb.CreateUserRequest{
+		Name: "janez",
+	}
+
+	// prvi create
+	user1, err := server.CreateUser(context.Background(), req)
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	if user1 == nil {
+		t.Fatalf("expected user, got nil")
+	}
+
+	if user1.Name != req.Name {
+		t.Errorf("user name mismatch: got %q want %q", user1.Name, req.Name)
+	}
+
+	if user1.Id != 1 {
+		t.Errorf("expected user id 1, got %d", user1.Id)
+	}
+
+	if len(server.users) != 1 {
+		t.Errorf("expected 1 user stored, got %d", len(server.users))
+	}
+
+	// drugi create z istim imenom
+	user2, err := server.CreateUser(context.Background(), req)
+	if err != nil {
+		t.Fatalf("CreateUser (duplicate) returned error: %v", err)
+	}
+
+	if user2.Id != user1.Id {
+		t.Errorf("duplicate user created: got id %d want %d", user2.Id, user1.Id)
+	}
+
+	if len(server.users) != 1 {
+		t.Errorf("expected still 1 user stored, got %d", len(server.users))
+	}
+}
+
 // helpers
 
 func (server *MessageBoardServer) createUser(t *testing.T, username string) *pb.User {
