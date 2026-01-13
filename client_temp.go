@@ -140,20 +140,23 @@ func handleInput(clientState *ClientState, line string) {
 // =============================================
 // COMMANDS
 
-// treba reconnectat vsakic v primeru ce head ali tail umre / je zamenjan
+// treba reconnectat vsakic v primeru da se karkoli spremeni
 func (client *ClientState) refreshConnections() error {
-	clusterState, err := client.orchClient.GetClusterState(client.Ctx, &emptypb.Empty{})
+	clusterState, err := client.orchClient.GetClusterState(client.ctx, &emptypb.Empty{})
 	if err != nil {
 		return err
 	}
 
-	client.ConnHead.Close()
-	client.ConnHead, _ = grpc.NewClient(clusterState.Head.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	client.rpcHead = pb.NewMessageBoardClient(client.ConnHead)
+	client.connHead.Close()
+	client.connHead, _ = grpc.NewClient(clusterState.Head.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client.rpcHead = pb.NewMessageBoardClient(client.connHead)
 
-	client.ConnTail.Close()
-	client.ConnTail, _ = grpc.NewClient(clusterState.Tail.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	client.rpcTail = pb.NewMessageBoardClient(client.ConnTail)
+	client.connTail.Close()
+	client.connTail, _ = grpc.NewClient(clusterState.Tail.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client.rpcTail = pb.NewMessageBoardClient(client.connTail)
+
+	fmt.Printf("Reconnected: HEAD=%s, TAIL=%s\n",
+		clusterState.Head.Address, clusterState.Tail.Address)
 
 	return nil
 }
@@ -198,7 +201,7 @@ func PostMessage(clientState *ClientState, topicId int64, text string) (*UiMessa
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return nil, refreshErr
+		return
 	}
 
 	req := &pb.PostMessageRequest{
@@ -259,7 +262,7 @@ func CreateTopic(clientState *ClientState, name string) error {
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return refreshErr
+		return
 	}
 
 	req := &pb.CreateTopicRequest{
@@ -309,7 +312,7 @@ func EditMessage(clientState *ClientState, messageId int, text string) error {
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return refreshErr
+		return
 	}
 
 	req := &pb.UpdateMessageRequest{
@@ -395,7 +398,7 @@ func LikeMessage(clientState *ClientState, messageId int64, topicId int) error {
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return refreshErr
+		return
 	}
 
 	//fmt.Printf("%d", messageId)
@@ -411,7 +414,7 @@ func DeleteMessage(clientState *ClientState, messageId int64, topicId int) error
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return refreshErr
+		return
 	}
 
 	req := &pb.DeleteMessageRequest{
@@ -451,7 +454,7 @@ func GetTopics(clientState *ClientState) (map[int64]string, error) {
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return nil, refreshErr
+		return
 	}
 
 	response, err := clientState.rpcTail.ListTopics(clientState.Ctx, &emptypb.Empty{})
@@ -531,7 +534,7 @@ func ListMessages(clientState *ClientState, topicId int64) (map[int64]UiMessageI
 
 	if refreshErr := clientState.refreshConnections(); refreshErr != nil {
 		fmt.Println("Failed to reconnect:", refreshErr)
-		return nil, refreshErr
+		return
 	}
 	req := &pb.GetMessagesRequest{
 		TopicId:       topicId,
