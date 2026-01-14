@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	pb "razpravljalnica/proto"
 	"sort"
 	"testing"
@@ -547,6 +549,79 @@ func TestSubscribe(t *testing.T) {
 	}
 }
 
+func TestDemo(t *testing.T) {
+	clientState1, err := ConnectToServer("localhost:8000", "demo client 1")
+	if err != nil {
+		fmt.Printf("Error creating client: %v", err)
+	}
+	defer clientState1.ConnHead.Close()
+	defer clientState1.ConnTail.Close()
+	clientState2, err := ConnectToServer("localhost:8000", "demo client 2")
+	if err != nil {
+		fmt.Printf("Failed to connect to server: %v", err)
+	}
+	defer clientState2.ConnHead.Close()
+	defer clientState2.ConnTail.Close()
+	clientState3, err := ConnectToServer("localhost:8000", "demo client 3")
+	if err != nil {
+		fmt.Printf("Failed to connect to server: %v", err)
+	}
+	defer clientState3.ConnHead.Close()
+	defer clientState3.ConnTail.Close()
+
+	users := []*ClientState{
+		clientState1,
+		clientState2,
+		clientState3,
+	}
+
+	// ustvarjanje topicov
+	var topics []*pb.Topic
+
+	topicNames := []string{
+		"demo topic 1",
+		"demo topic 2",
+		"demo topic 3",
+	}
+
+	for _, name := range topicNames {
+		topic := createTopic(t, clientState1, name)
+		topics = append(topics, topic)
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	// pisanje sporočil
+	var messages []*pb.Message
+	texts := []string{
+		"hello world",
+		"how are you?",
+		"this is a test",
+		"nice weather today",
+		"it' very cold topday",
+		"i love go",
+		"bla bla bla",
+		"random message",
+		"another post",
+	}
+
+	// naključno pošiljamo
+	for i := 0; i < len(topics); i++ {
+		for j := 0; j < 30; j++ {
+			user := users[rand.Intn(len(users))]
+			text := texts[rand.Intn(len(texts))]
+			msg := postMessage(t, user, topics[i].Id, fmt.Sprintf("%s #%d", text, j))
+			messages = append(messages, msg)
+		}
+	}
+
+	// naključno likeamo
+	for i := 0; i < 50; i++ {
+		user := users[rand.Intn(len(users))]
+		msg := messages[rand.Intn(len(messages))]
+		likeMessage(t, user, msg.Id)
+	}
+}
+
 // helpers
 
 func createTopic(t *testing.T, clientState *ClientState, name string) *pb.Topic {
@@ -595,4 +670,14 @@ func getTopics(t *testing.T, clientState *ClientState) []*pb.Topic {
 		t.Fatalf("ListTopics returned error: %v", err)
 	}
 	return resp.Topics
+}
+
+func likeMessage(t *testing.T, clientState *ClientState, messageId int64) {
+	_, err := clientState.rpcHead.LikeMessage(context.Background(), &pb.LikeMessageRequest{
+		MessageId: messageId,
+		UserId:    clientState.User.Id,
+	})
+	if err != nil {
+		//t.Fatalf("LikeMessage failed: %v", err)
+	}
 }
